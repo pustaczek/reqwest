@@ -13,6 +13,7 @@ use response::Response;
 use {async_impl, header, Method, IntoUrl, Proxy, RedirectPolicy, wait};
 #[cfg(feature = "tls")]
 use {Certificate, Identity};
+use cookie::CookieStore;
 
 /// A `Client` to make Requests with.
 ///
@@ -369,7 +370,7 @@ impl ClientBuilder {
 
     /// Enable a persistent cookie store for the client.
     ///
-    /// Cookies received in responses will be preserved and included in 
+    /// Cookies received in responses will be preserved and included in
     /// additional requests.
     ///
     /// By default, no cookie store is used.
@@ -495,6 +496,11 @@ impl Client {
     pub fn execute(&self, request: Request) -> ::Result<Response> {
         self.inner.execute_request(request)
     }
+
+    ///
+    pub fn cookies(&self) -> &std::sync::RwLock<CookieStore> {
+        self.inner.raw_ref.cookie_store.as_ref().unwrap()
+    }
 }
 
 impl fmt::Debug for Client {
@@ -516,6 +522,7 @@ impl fmt::Debug for ClientBuilder {
 
 #[derive(Clone)]
 struct ClientHandle {
+    raw_ref: Arc<async_impl::client::ClientRef>,
     timeout: Timeout,
     inner: Arc<InnerClientHandle>
 }
@@ -540,6 +547,7 @@ impl ClientHandle {
         let builder = builder.inner;
         let (tx, rx) = mpsc::unbounded();
         let (spawn_tx, spawn_rx) = oneshot::channel::<::Result<()>>();
+        let (raw_tx, raw_rx) = oneshot::channel();
         let handle = try_!(thread::Builder::new().name("reqwest-internal-sync-runtime".into()).spawn(move || {
             use tokio::runtime::current_thread::Runtime;
 
@@ -561,6 +569,8 @@ impl ClientHandle {
                     return;
                 }
             };
+            let raw_ref = client.inner.clone();
+            let _ = raw_tx.send(raw_ref);
 
             let work = rx.for_each(move |(req, tx)| {
                 let mut tx_opt: Option<oneshot::Sender<::Result<async_impl::Response>>> = Some(tx);
@@ -614,8 +624,10 @@ impl ClientHandle {
             thread: Some(handle)
         });
 
+        let raw_ref = raw_rx.wait().unwrap();
 
         Ok(ClientHandle {
+            raw_ref,
             timeout: timeout,
             inner: inner_handle,
         })

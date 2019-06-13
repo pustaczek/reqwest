@@ -129,7 +129,7 @@ pub(crate) fn extract_response_cookies<'a>(
 
 /// A persistent cookie store that provides session support.
 #[derive(Default)]
-pub(crate) struct CookieStore(pub(crate) ::cookie_store::CookieStore);
+pub struct CookieStore(pub ::cookie_store::CookieStore);
 
 impl<'a> fmt::Debug for CookieStore {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

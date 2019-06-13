@@ -54,7 +54,7 @@ static DEFAULT_USER_AGENT: &'static str =
 /// you create one and **reuse** it.
 #[derive(Clone)]
 pub struct Client {
-    inner: Arc<ClientRef>,
+    pub(crate) inner: Arc<ClientRef>,
 }
 
 /// A `ClientBuilder` can be used to create a `Client` with  custom configuration.
@@ -656,8 +656,8 @@ impl fmt::Debug for ClientBuilder {
     }
 }
 
-struct ClientRef {
-    cookie_store: Option<RwLock<cookie::CookieStore>>,
+pub(crate) struct ClientRef {
+    pub(crate) cookie_store: Option<RwLock<cookie::CookieStore>>,
     gzip: bool,
     headers: HeaderMap,
     hyper: HyperClient,
