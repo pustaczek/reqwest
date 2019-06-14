@@ -174,7 +174,7 @@
 extern crate base64;
 extern crate bytes;
 extern crate cookie as cookie_crate;
-extern crate cookie_store;
+pub extern crate cookie_store;
 extern crate encoding_rs;
 #[macro_use]
 extern crate futures;
