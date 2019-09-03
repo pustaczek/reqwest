@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 #![deny(missing_debug_implementations)]
 #![cfg_attr(test, deny(warnings))]
-#![doc(html_root_url = "https://docs.rs/reqwest/0.9.18")]
+#![doc(html_root_url = "https://docs.rs/reqwest/0.9.20")]
 
 //! # reqwest
 //!
@@ -133,6 +133,8 @@
 //! A `Client` can be configured to make use of HTTP proxies by adding
 //! [`Proxy`](Proxy)s to a `ClientBuilder`.
 //!
+//! ** NOTE** System proxies will be used in the next breaking change.
+//!
 //! ## TLS
 //!
 //! By default, a `Client` will make use of system-native transport layer
@@ -206,6 +208,8 @@ extern crate url;
 extern crate uuid;
 #[cfg(feature = "socks")]
 extern crate socks;
+#[cfg(target_os = "windows")]
+extern crate winreg;
 
 #[cfg(feature = "rustls-tls")]
 extern crate hyper_rustls;

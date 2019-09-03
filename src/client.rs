@@ -85,6 +85,16 @@ impl ClientBuilder {
         })
     }
 
+    /// Disable proxy setting.
+    pub fn no_proxy(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.no_proxy())
+    }
+
+    /// Enable system proxy setting.
+    pub fn use_sys_proxy(self) -> ClientBuilder {
+        self.with_inner(move |inner| inner.use_sys_proxy())
+    }
+
     /// Set that all sockets have `SO_NODELAY` set to `true`.
     pub fn tcp_nodelay(self) -> ClientBuilder {
         self.with_inner(move |inner| inner.tcp_nodelay())
