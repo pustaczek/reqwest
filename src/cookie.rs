@@ -1,13 +1,13 @@
 //! The cookies module contains types for working with request and response cookies.
 
-use cookie_crate;
-use header;
+use crate::cookie_crate;
+use crate::header;
 use std::borrow::Cow;
 use std::fmt;
 use std::time::SystemTime;
 
 /// Convert a time::Tm time to SystemTime.
-fn tm_to_systemtime(tm: ::time::Tm) -> SystemTime {
+fn tm_to_systemtime(tm: time::Tm) -> SystemTime {
     let seconds = tm.to_timespec().sec;
     let duration = std::time::Duration::from_secs(seconds.abs() as u64);
     if seconds > 0 {
@@ -55,7 +55,7 @@ impl Cookie<'static> {
 }
 
 impl<'a> Cookie<'a> {
-    fn parse(value: &'a ::header::HeaderValue) -> Result<Cookie<'a>, CookieParseError> {
+    fn parse(value: &'a crate::header::HeaderValue) -> Result<Cookie<'a>, CookieParseError> {
         std::str::from_utf8(value.as_bytes())
             .map_err(cookie::ParseError::from)
             .and_then(cookie::Cookie::parse)
@@ -109,7 +109,9 @@ impl<'a> Cookie<'a> {
 
     /// Get the Max-Age information.
     pub fn max_age(&self) -> Option<std::time::Duration> {
-        self.0.max_age().map(|d| std::time::Duration::new(d.num_seconds() as u64, 0))
+        self.0
+            .max_age()
+            .map(|d| std::time::Duration::new(d.num_seconds() as u64, 0))
     }
 
     /// The cookie expiration time.
@@ -129,7 +131,7 @@ pub(crate) fn extract_response_cookies<'a>(
 
 /// A persistent cookie store that provides session support.
 #[derive(Default)]
-pub struct CookieStore(pub ::cookie_store::CookieStore);
+pub struct CookieStore(pub cookie_store::CookieStore);
 
 impl<'a> fmt::Debug for CookieStore {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

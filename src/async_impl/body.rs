@@ -1,7 +1,7 @@
 use std::fmt;
 
-use futures::{Future, Stream, Poll, Async};
 use bytes::{Buf, Bytes};
+use futures::{try_ready, Async, Future, Poll, Stream};
 use hyper::body::Payload;
 use tokio::timer::Delay;
 
@@ -13,9 +13,9 @@ pub struct Body {
 enum Inner {
     Reusable(Bytes),
     Hyper {
-        body: ::hyper::Body,
+        body: hyper::Body,
         timeout: Option<Delay>,
-    }
+    },
 }
 
 impl Body {
@@ -27,17 +27,14 @@ impl Body {
     }
 
     #[inline]
-    pub(crate) fn response(body: ::hyper::Body, timeout: Option<Delay>) -> Body {
+    pub(crate) fn response(body: hyper::Body, timeout: Option<Delay>) -> Body {
         Body {
-            inner: Inner::Hyper {
-                body,
-                timeout,
-            },
+            inner: Inner::Hyper { body, timeout },
         }
     }
 
     #[inline]
-    pub(crate) fn wrap(body: ::hyper::Body) -> Body {
+    pub(crate) fn wrap(body: hyper::Body) -> Body {
         Body {
             inner: Inner::Hyper {
                 body,
@@ -48,7 +45,7 @@ impl Body {
 
     #[inline]
     pub(crate) fn empty() -> Body {
-        Body::wrap(::hyper::Body::empty())
+        Body::wrap(hyper::Body::empty())
     }
 
     #[inline]
@@ -59,32 +56,35 @@ impl Body {
     }
 
     #[inline]
-    pub(crate) fn into_hyper(self) -> (Option<Bytes>, ::hyper::Body) {
+    pub(crate) fn into_hyper(self) -> (Option<Bytes>, hyper::Body) {
         match self.inner {
             Inner::Reusable(chunk) => (Some(chunk.clone()), chunk.into()),
             Inner::Hyper { body, timeout } => {
                 debug_assert!(timeout.is_none());
                 (None, body)
-            },
+            }
         }
     }
 }
 
 impl Stream for Body {
     type Item = Chunk;
-    type Error = ::Error;
+    type Error = crate::Error;
 
     #[inline]
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
         let opt = match self.inner {
-            Inner::Hyper { ref mut body, ref mut timeout } => {
+            Inner::Hyper {
+                ref mut body,
+                ref mut timeout,
+            } => {
                 if let Some(ref mut timeout) = timeout {
                     if let Async::Ready(()) = try_!(timeout.poll()) {
-                        return Err(::error::timedout(None));
+                        return Err(crate::error::timedout(None));
                     }
                 }
-                try_ready!(body.poll_data().map_err(::error::from))
-            },
+                try_ready!(body.poll_data().map_err(crate::error::from))
+            }
             Inner::Reusable(ref mut bytes) => {
                 return if bytes.is_empty() {
                     Ok(Async::Ready(None))
@@ -93,12 +93,10 @@ impl Stream for Body {
                     *bytes = Bytes::new();
                     Ok(Async::Ready(Some(chunk)))
                 };
-            },
+            }
         };
 
-        Ok(Async::Ready(opt.map(|chunk| Chunk {
-            inner: chunk,
-        })))
+        Ok(Async::Ready(opt.map(|chunk| Chunk { inner: chunk })))
     }
 }
 
@@ -145,7 +143,7 @@ where
 {
     #[inline]
     fn from(s: Box<dyn Stream<Item = I, Error = E> + Send>) -> Body {
-        Body::wrap(::hyper::Body::wrap_stream(s))
+        Body::wrap(hyper::Body::wrap_stream(s))
     }
 }
 
@@ -154,17 +152,18 @@ where
 /// A `Chunk` can be treated like `&[u8]`.
 #[derive(Default)]
 pub struct Chunk {
-    inner: ::hyper::Chunk,
+    inner: hyper::Chunk,
 }
 
 impl Chunk {
     #[inline]
     pub(crate) fn from_chunk(chunk: Bytes) -> Chunk {
         Chunk {
-            inner: ::hyper::Chunk::from(chunk)
+            inner: hyper::Chunk::from(chunk),
         }
     }
 }
+
 impl Buf for Chunk {
     fn bytes(&self) -> &[u8] {
         self.inner.bytes()
@@ -186,7 +185,7 @@ impl AsRef<[u8]> for Chunk {
     }
 }
 
-impl ::std::ops::Deref for Chunk {
+impl std::ops::Deref for Chunk {
     type Target = [u8];
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -196,7 +195,9 @@ impl ::std::ops::Deref for Chunk {
 
 impl Extend<u8> for Chunk {
     fn extend<T>(&mut self, iter: T)
-    where T: IntoIterator<Item=u8> {
+    where
+        T: IntoIterator<Item = u8>,
+    {
         self.inner.extend(iter)
     }
 }
@@ -204,22 +205,57 @@ impl Extend<u8> for Chunk {
 impl IntoIterator for Chunk {
     type Item = u8;
     //XXX: exposing type from hyper!
-    type IntoIter = <::hyper::Chunk as IntoIterator>::IntoIter;
+    type IntoIter = <hyper::Chunk as IntoIterator>::IntoIter;
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()
     }
 }
 
+impl From<Vec<u8>> for Chunk {
+    fn from(v: Vec<u8>) -> Chunk {
+        Chunk { inner: v.into() }
+    }
+}
+
+impl From<&'static [u8]> for Chunk {
+    fn from(slice: &'static [u8]) -> Chunk {
+        Chunk {
+            inner: slice.into(),
+        }
+    }
+}
+
+impl From<String> for Chunk {
+    fn from(s: String) -> Chunk {
+        Chunk { inner: s.into() }
+    }
+}
+
+impl From<&'static str> for Chunk {
+    fn from(slice: &'static str) -> Chunk {
+        Chunk {
+            inner: slice.into(),
+        }
+    }
+}
+
+impl From<Bytes> for Chunk {
+    fn from(bytes: Bytes) -> Chunk {
+        Chunk {
+            inner: bytes.into(),
+        }
+    }
+}
+
 impl From<Chunk> for hyper::Chunk {
-  fn from(val: Chunk) -> hyper::Chunk {
-    val.inner
-  }
+    fn from(val: Chunk) -> hyper::Chunk {
+        val.inner
+    }
 }
 
 impl fmt::Debug for Body {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Body")
-            .finish()
+        f.debug_struct("Body").finish()
     }
 }
 

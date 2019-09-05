@@ -2,9 +2,9 @@
 
 use std::io::{Read, Write};
 use std::net;
-use std::time::Duration;
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 
 pub struct Server {
     addr: net::SocketAddr,
@@ -19,9 +19,8 @@ impl Server {
 
 impl Drop for Server {
     fn drop(&mut self) {
-        if !::std::thread::panicking() {
-            self
-                .panic_rx
+        if !thread::panicking() {
+            self.panic_rx
                 .recv_timeout(Duration::from_secs(3))
                 .expect("test server should not panic");
         }
@@ -47,7 +46,10 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
     let listener = net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let (panic_tx, panic_rx) = mpsc::channel();
-    let tname = format!("test({})-support-server", thread::current().name().unwrap_or("<unknown>"));
+    let tname = format!(
+        "test({})-support-server",
+        thread::current().name().unwrap_or("<unknown>")
+    );
     thread::Builder::new().name(tname).spawn(move || {
         'txns: for txn in txns {
             let mut expected = txn.request;
@@ -97,9 +99,9 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
                 }
             }
 
-            match (::std::str::from_utf8(&expected), ::std::str::from_utf8(&buf[..n])) {
+            match (std::str::from_utf8(&expected), std::str::from_utf8(&buf[..n])) {
                 (Ok(expected), Ok(received)) => {
-                    if expected.len() > 300 && ::std::env::var("REQWEST_TEST_BODY_FULL").is_err() {
+                    if expected.len() > 300 && std::env::var("REQWEST_TEST_BODY_FULL").is_err() {
                         assert_eq!(
                             expected.len(),
                             received.len(),
@@ -149,10 +151,7 @@ pub fn spawn(txns: Vec<Txn>) -> Server {
         let _ = panic_tx.send(());
     }).expect("server thread spawn");
 
-    Server {
-        addr,
-        panic_rx,
-    }
+    Server { addr, panic_rx }
 }
 
 fn replace_expected_vars(bytes: &mut Vec<u8>, host: &[u8], ua: &[u8]) {
@@ -196,30 +195,29 @@ macro_rules! server {
                 $($f: $v,)+
             }),*
         ];
-        ::support::server::spawn(txns)
+        crate::support::server::spawn(txns)
     })
 }
 
 #[macro_export]
 macro_rules! __internal__txn {
     ($($field:ident: $val:expr,)+) => (
-        ::support::server::Txn {
+        crate::support::server::Txn {
             $( $field: __internal__prop!($field: $val), )+
             .. Default::default()
         }
     )
 }
 
-
 #[macro_export]
 macro_rules! __internal__prop {
-    (request: $val:expr) => (
+    (request: $val:expr) => {
         From::from(&$val[..])
-    );
-    (response: $val:expr) => (
+    };
+    (response: $val:expr) => {
         From::from(&$val[..])
-    );
-    ($field:ident: $val:expr) => (
+    };
+    ($field:ident: $val:expr) => {
         From::from($val)
-    )
+    };
 }

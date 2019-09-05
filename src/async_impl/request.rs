@@ -1,18 +1,18 @@
 use std::fmt;
 
-use base64::{encode};
+use base64::encode;
 use futures::Future;
 use serde::Serialize;
 use serde_json;
 use serde_urlencoded;
 
-use super::body::{Body};
+use super::body::Body;
 use super::client::{Client, Pending};
 use super::multipart;
 use super::response::Response;
-use header::{CONTENT_LENGTH, CONTENT_TYPE, HeaderMap, HeaderName, HeaderValue};
+use crate::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_LENGTH, CONTENT_TYPE};
+use crate::{Method, Url};
 use http::HttpTryFrom;
-use {Method, Url};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -25,7 +25,7 @@ pub struct Request {
 /// A builder to construct the properties of a `Request`.
 pub struct RequestBuilder {
     client: Client,
-    request: ::Result<Request>,
+    request: crate::Result<Request>,
 }
 
 impl Request {
@@ -94,11 +94,8 @@ impl Request {
 }
 
 impl RequestBuilder {
-    pub(super) fn new(client: Client, request: ::Result<Request>) -> RequestBuilder {
-        RequestBuilder {
-            client,
-            request,
-        }
+    pub(super) fn new(client: Client, request: crate::Result<Request>) -> RequestBuilder {
+        RequestBuilder { client, request }
     }
 
     /// Add a `Header` to this Request.
@@ -110,13 +107,13 @@ impl RequestBuilder {
         let mut error = None;
         if let Ok(ref mut req) = self.request {
             match <HeaderName as HttpTryFrom<K>>::try_from(key) {
-                Ok(key) => {
-                    match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
-                        Ok(value) => { req.headers_mut().append(key, value); }
-                        Err(e) => error = Some(::error::from(e.into())),
+                Ok(key) => match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
+                    Ok(value) => {
+                        req.headers_mut().append(key, value);
                     }
+                    Err(e) => error = Some(crate::error::from(e.into())),
                 },
-                Err(e) => error = Some(::error::from(e.into())),
+                Err(e) => error = Some(crate::error::from(e.into())),
             };
         }
         if let Some(err) = error {
@@ -128,7 +125,7 @@ impl RequestBuilder {
     /// Add a set of Headers to the existing ones on this Request.
     ///
     /// The headers will be merged in to any already set.
-    pub fn headers(mut self, headers: ::header::HeaderMap) -> RequestBuilder {
+    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             replace_headers(req.headers_mut(), headers);
         }
@@ -142,11 +139,11 @@ impl RequestBuilder {
     #[cfg(feature = "hyper-011")]
     pub fn header_011<H>(self, header: H) -> RequestBuilder
     where
-        H: ::hyper_011::header::Header,
+        H: crate::hyper_011::header::Header,
     {
-        let mut headers = ::hyper_011::Headers::new();
+        let mut headers = crate::hyper_011::Headers::new();
         headers.set(header);
-        let map = ::header::HeaderMap::from(headers);
+        let map = crate::header::HeaderMap::from(headers);
         self.headers(map)
     }
 
@@ -155,8 +152,8 @@ impl RequestBuilder {
     /// This method is provided to ease migration, and requires the `hyper-011`
     /// Cargo feature enabled on `reqwest`.
     #[cfg(feature = "hyper-011")]
-    pub fn headers_011(self, headers: ::hyper_011::Headers) -> RequestBuilder {
-        let map = ::header::HeaderMap::from(headers);
+    pub fn headers_011(self, headers: crate::hyper_011::Headers) -> RequestBuilder {
+        let map = crate::header::HeaderMap::from(headers);
         self.headers(map)
     }
 
@@ -168,10 +165,10 @@ impl RequestBuilder {
     {
         let auth = match password {
             Some(password) => format!("{}:{}", username, password),
-            None => format!("{}:", username)
+            None => format!("{}:", username),
         };
         let header_value = format!("Basic {}", encode(&auth));
-        self.header(::header::AUTHORIZATION, &*header_value)
+        self.header(crate::header::AUTHORIZATION, &*header_value)
     }
 
     /// Enable HTTP bearer authentication.
@@ -180,7 +177,7 @@ impl RequestBuilder {
         T: fmt::Display,
     {
         let header_value = format!("Bearer {}", token);
-        self.header(::header::AUTHORIZATION, &*header_value)
+        self.header(crate::header::AUTHORIZATION, &*header_value)
     }
 
     /// Set the request body.
@@ -201,8 +198,8 @@ impl RequestBuilder {
     /// # use futures::future::Future;
     ///
     /// # fn run() -> Result<(), Error> {
-    /// let client = reqwest::async::Client::new();
-    /// let form = reqwest::async::multipart::Form::new()
+    /// let client = reqwest::r#async::Client::new();
+    /// let form = reqwest::r#async::multipart::Form::new()
     ///     .text("key3", "value3")
     ///     .text("key4", "value4");
     ///
@@ -221,10 +218,7 @@ impl RequestBuilder {
     pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {
         let mut builder = self.header(
             CONTENT_TYPE,
-            format!(
-                "multipart/form-data; boundary={}",
-                multipart.boundary()
-            ).as_str()
+            format!("multipart/form-data; boundary={}", multipart.boundary()).as_str(),
         );
 
         builder = match multipart.compute_length() {
@@ -264,7 +258,7 @@ impl RequestBuilder {
             let serializer = serde_urlencoded::Serializer::new(&mut pairs);
 
             if let Err(err) = query.serialize(serializer) {
-                error = Some(::error::from(err));
+                error = Some(crate::error::from(err));
             }
         }
         if let Ok(ref mut req) = self.request {
@@ -286,11 +280,11 @@ impl RequestBuilder {
                 Ok(body) => {
                     req.headers_mut().insert(
                         CONTENT_TYPE,
-                        HeaderValue::from_static("application/x-www-form-urlencoded")
+                        HeaderValue::from_static("application/x-www-form-urlencoded"),
                     );
                     *req.body_mut() = Some(body.into());
-                },
-                Err(err) => error = Some(::error::from(err)),
+                }
+                Err(err) => error = Some(crate::error::from(err)),
             }
         }
         if let Some(err) = error {
@@ -310,13 +304,11 @@ impl RequestBuilder {
         if let Ok(ref mut req) = self.request {
             match serde_json::to_vec(json) {
                 Ok(body) => {
-                    req.headers_mut().insert(
-                        CONTENT_TYPE,
-                        HeaderValue::from_static("application/json")
-                    );
+                    req.headers_mut()
+                        .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
                     *req.body_mut() = Some(body.into());
-                },
-                Err(err) => error = Some(::error::from(err)),
+                }
+                Err(err) => error = Some(crate::error::from(err)),
             }
         }
         if let Some(err) = error {
@@ -327,7 +319,7 @@ impl RequestBuilder {
 
     /// Build a `Request`, which can be inspected, modified and executed with
     /// `Client::execute()`.
-    pub fn build(self) -> ::Result<Request> {
+    pub fn build(self) -> crate::Result<Request> {
         self.request
     }
 
@@ -358,7 +350,7 @@ impl RequestBuilder {
     /// rt.block_on(response)
     /// # }
     /// ```
-    pub fn send(self) -> impl Future<Item = Response, Error = ::Error> {
+    pub fn send(self) -> impl Future<Item = Response, Error = crate::Error> {
         match self.request {
             Ok(req) => self.client.execute_request(req),
             Err(err) => Pending::new_err(err),
@@ -368,8 +360,7 @@ impl RequestBuilder {
 
 impl fmt::Debug for Request {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt_request_fields(&mut f.debug_struct("Request"), self)
-            .finish()
+        fmt_request_fields(&mut f.debug_struct("Request"), self).finish()
     }
 }
 
@@ -377,27 +368,22 @@ impl fmt::Debug for RequestBuilder {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut builder = f.debug_struct("RequestBuilder");
         match self.request {
-            Ok(ref req) => {
-                fmt_request_fields(&mut builder, req)
-                    .finish()
-            },
-            Err(ref err) => {
-                builder
-                    .field("error", err)
-                    .finish()
-            }
+            Ok(ref req) => fmt_request_fields(&mut builder, req).finish(),
+            Err(ref err) => builder.field("error", err).finish(),
         }
     }
 }
 
-fn fmt_request_fields<'a, 'b>(f: &'a mut fmt::DebugStruct<'a, 'b>, req: &Request) -> &'a mut fmt::DebugStruct<'a, 'b> {
+fn fmt_request_fields<'a, 'b>(
+    f: &'a mut fmt::DebugStruct<'a, 'b>,
+    req: &Request,
+) -> &'a mut fmt::DebugStruct<'a, 'b> {
     f.field("method", &req.method)
         .field("url", &req.url)
         .field("headers", &req.headers)
 }
 
 pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
-
     // IntoIter of HeaderMap yields (Option<HeaderName>, HeaderValue).
     // The first time a name is yielded, it will be Some(name), and if
     // there are more values with the same name, the next yield will be
@@ -413,11 +399,11 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
             Some(key) => {
                 dst.insert(key.clone(), value);
                 prev_name = Some(key);
-            },
+            }
             None => match prev_name {
                 Some(ref key) => {
                     dst.append(key.clone(), value);
-                },
+                }
                 None => unreachable!("HeaderMap::into_iter yielded None first"),
             },
         }
@@ -427,8 +413,8 @@ pub(crate) fn replace_headers(dst: &mut HeaderMap, src: HeaderMap) {
 #[cfg(test)]
 mod tests {
     use super::Client;
-    use std::collections::BTreeMap;
     use serde::Serialize;
+    use std::collections::BTreeMap;
 
     #[test]
     fn add_query_append() {
@@ -467,7 +453,10 @@ mod tests {
         let some_url = "https://google.com/";
         let r = client.get(some_url);
 
-        let params = Params { foo: "bar".into(), qux: 3 };
+        let params = Params {
+            foo: "bar".into(),
+            qux: 3,
+        };
 
         let r = r.query(&params);
 
@@ -510,11 +499,7 @@ mod tests {
 
         assert_eq!(req.headers()["im-a"], "keeper");
 
-        let foo = req
-            .headers()
-            .get_all("foo")
-            .iter()
-            .collect::<Vec<_>>();
+        let foo = req.headers().get_all("foo").iter().collect::<Vec<_>>();
         assert_eq!(foo.len(), 2);
         assert_eq!(foo[0], "bar");
         assert_eq!(foo[1], "baz");

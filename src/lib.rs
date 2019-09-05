@@ -173,52 +173,12 @@
 //! [Proxy]: ./struct.Proxy.html
 //! [cargo-features]: https://doc.rust-lang.org/stable/cargo/reference/manifest.html#the-features-section
 
-extern crate base64;
-extern crate bytes;
 extern crate cookie as cookie_crate;
-pub extern crate cookie_store;
-extern crate encoding_rs;
-#[macro_use]
-extern crate futures;
-extern crate http;
-extern crate hyper;
-#[cfg(feature = "hyper-011")]
-pub extern crate hyper_old_types as hyper_011;
-#[cfg(feature = "default-tls")]
-extern crate hyper_tls;
-#[macro_use]
-extern crate log;
-extern crate flate2;
-extern crate mime;
-extern crate mime_guess;
-#[cfg(feature = "default-tls")]
-extern crate native_tls;
-extern crate serde;
-extern crate serde_json;
-extern crate serde_urlencoded;
-extern crate time;
-extern crate tokio;
-extern crate tokio_executor;
-#[cfg_attr(feature = "default-tls", macro_use)]
-extern crate tokio_io;
-extern crate tokio_timer;
-#[cfg(feature = "trust-dns")]
-extern crate trust_dns_resolver;
-extern crate url;
-extern crate uuid;
-#[cfg(feature = "socks")]
-extern crate socks;
-#[cfg(target_os = "windows")]
-extern crate winreg;
 
-#[cfg(feature = "rustls-tls")]
-extern crate hyper_rustls;
-#[cfg(feature = "rustls-tls")]
-extern crate tokio_rustls;
-#[cfg(feature = "rustls-tls")]
-extern crate webpki_roots;
-#[cfg(feature = "rustls-tls")]
-extern crate rustls;
+pub extern crate cookie_store;
+#[cfg(feature = "hyper-011")]
+pub use hyper_old_types as hyper_011;
+
 #[cfg(test)]
 #[macro_use]
 extern crate doc_comment;
@@ -229,12 +189,12 @@ doctest!("../README.md");
 pub use hyper::header;
 pub use hyper::Method;
 pub use hyper::{StatusCode, Version};
-pub use url::Url;
 pub use url::ParseError as UrlError;
+pub use url::Url;
 
+pub use self::body::Body;
 pub use self::client::{Client, ClientBuilder};
 pub use self::error::{Error, Result};
-pub use self::body::Body;
 pub use self::into_url::IntoUrl;
 pub use self::proxy::Proxy;
 pub use self::redirect::{RedirectAction, RedirectAttempt, RedirectPolicy};
@@ -243,15 +203,14 @@ pub use self::response::Response;
 #[cfg(feature = "tls")]
 pub use self::tls::{Certificate, Identity};
 
-
 // this module must be first because of the `try_` macro
 #[macro_use]
 mod error;
 
 mod async_impl;
-mod connect;
 mod body;
 mod client;
+mod connect;
 pub mod cookie;
 #[cfg(feature = "trust-dns")]
 mod dns;
@@ -267,18 +226,10 @@ mod wait;
 pub mod multipart;
 
 /// An 'async' implementation of the reqwest `Client`.
-pub mod async {
-    pub use ::async_impl::{
-        Body,
-        Chunk,
-        Decoder,
-        Client,
-        ClientBuilder,
-        Request,
-        RequestBuilder,
-        Response,
+pub mod r#async {
+    pub use crate::async_impl::{
+        multipart, Body, Chunk, Client, ClientBuilder, Decoder, Request, RequestBuilder, Response,
         ResponseBuilderExt,
-        multipart
     };
 }
 
@@ -311,11 +262,8 @@ pub mod async {
 /// - there was an error while sending request
 /// - redirect loop was detected
 /// - redirect limit was exhausted
-pub fn get<T: IntoUrl>(url: T) -> ::Result<Response> {
-    Client::builder()
-        .build()?
-        .get(url)
-        .send()
+pub fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
+    Client::builder().build()?.get(url).send()
 }
 
 fn _assert_impls() {

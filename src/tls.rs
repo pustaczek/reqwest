@@ -1,6 +1,6 @@
-use std::fmt;
 #[cfg(feature = "rustls-tls")]
-use rustls::{TLSError, ServerCertVerifier, RootCertStore, ServerCertVerified};
+use rustls::{RootCertStore, ServerCertVerified, ServerCertVerifier, TLSError};
+use std::fmt;
 #[cfg(feature = "rustls-tls")]
 use tokio_rustls::webpki::DNSNameRef;
 
@@ -8,7 +8,7 @@ use tokio_rustls::webpki::DNSNameRef;
 #[derive(Clone)]
 pub struct Certificate {
     #[cfg(feature = "default-tls")]
-    native: ::native_tls::Certificate,
+    native: native_tls::Certificate,
     #[cfg(feature = "rustls-tls")]
     original: Cert,
 }
@@ -17,7 +17,7 @@ pub struct Certificate {
 #[derive(Clone)]
 enum Cert {
     Der(Vec<u8>),
-    Pem(Vec<u8>)
+    Pem(Vec<u8>),
 }
 
 /// Represent a private key and X509 cert as a client certificate.
@@ -27,12 +27,12 @@ pub struct Identity {
 
 enum ClientCert {
     #[cfg(feature = "default-tls")]
-    Pkcs12(::native_tls::Identity),
+    Pkcs12(native_tls::Identity),
     #[cfg(feature = "rustls-tls")]
     Pem {
-        key: ::rustls::PrivateKey,
-        certs: Vec<::rustls::Certificate>,
-    }
+        key: rustls::PrivateKey,
+        certs: Vec<rustls::Certificate>,
+    },
 }
 
 impl Certificate {
@@ -52,15 +52,14 @@ impl Certificate {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn from_der(der: &[u8]) -> ::Result<Certificate> {
+    pub fn from_der(der: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
-            native: try_!(::native_tls::Certificate::from_der(der)),
+            native: try_!(native_tls::Certificate::from_der(der)),
             #[cfg(feature = "rustls-tls")]
             original: Cert::Der(der.to_owned()),
         })
     }
-
 
     /// Create a `Certificate` from a PEM encoded certificate
     ///
@@ -78,41 +77,37 @@ impl Certificate {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn from_pem(pem: &[u8]) -> ::Result<Certificate> {
+    pub fn from_pem(pem: &[u8]) -> crate::Result<Certificate> {
         Ok(Certificate {
             #[cfg(feature = "default-tls")]
-            native: try_!(::native_tls::Certificate::from_pem(pem)),
+            native: try_!(native_tls::Certificate::from_pem(pem)),
             #[cfg(feature = "rustls-tls")]
-            original: Cert::Pem(pem.to_owned())
+            original: Cert::Pem(pem.to_owned()),
         })
     }
 
     #[cfg(feature = "default-tls")]
-    pub(crate) fn add_to_native_tls(
-        self,
-        tls: &mut ::native_tls::TlsConnectorBuilder,
-    ) {
+    pub(crate) fn add_to_native_tls(self, tls: &mut native_tls::TlsConnectorBuilder) {
         tls.add_root_certificate(self.native);
     }
 
     #[cfg(feature = "rustls-tls")]
-    pub(crate) fn add_to_rustls(
-        self,
-        tls: &mut ::rustls::ClientConfig,
-    ) -> ::Result<()> {
-        use std::io::Cursor;
+    pub(crate) fn add_to_rustls(self, tls: &mut rustls::ClientConfig) -> crate::Result<()> {
         use rustls::internal::pemfile;
+        use std::io::Cursor;
 
         match self.original {
-            Cert::Der(buf) => try_!(tls.root_store.add(&::rustls::Certificate(buf))
+            Cert::Der(buf) => try_!(tls
+                .root_store
+                .add(&::rustls::Certificate(buf))
                 .map_err(TLSError::WebPKIError)),
             Cert::Pem(buf) => {
                 let mut pem = Cursor::new(buf);
-                let certs = try_!(pemfile::certs(&mut pem)
-                    .map_err(|_| TLSError::General(String::from("No valid certificate was found"))));
+                let certs = try_!(pemfile::certs(&mut pem).map_err(|_| TLSError::General(
+                    String::from("No valid certificate was found")
+                )));
                 for c in certs {
-                    try_!(tls.root_store.add(&c)
-                        .map_err(TLSError::WebPKIError));
+                    try_!(tls.root_store.add(&c).map_err(TLSError::WebPKIError));
                 }
             }
         }
@@ -149,11 +144,9 @@ impl Identity {
     /// # }
     /// ```
     #[cfg(feature = "default-tls")]
-    pub fn from_pkcs12_der(der: &[u8], password: &str) -> ::Result<Identity> {
+    pub fn from_pkcs12_der(der: &[u8], password: &str) -> crate::Result<Identity> {
         Ok(Identity {
-            inner: ClientCert::Pkcs12(
-                try_!(::native_tls::Identity::from_pkcs12(der, password))
-            ),
+            inner: ClientCert::Pkcs12(try_!(native_tls::Identity::from_pkcs12(der, password))),
         })
     }
 
@@ -177,9 +170,9 @@ impl Identity {
     /// # }
     /// ```
     #[cfg(feature = "rustls-tls")]
-    pub fn from_pem(buf: &[u8]) -> ::Result<Identity> {
-        use std::io::Cursor;
+    pub fn from_pem(buf: &[u8]) -> crate::Result<Identity> {
         use rustls::internal::pemfile;
+        use std::io::Cursor;
 
         let (key, certs) = {
             let mut pem = Cursor::new(buf);
@@ -202,60 +195,54 @@ impl Identity {
             if let (Some(sk), false) = (sk.pop(), certs.is_empty()) {
                 (sk, certs)
             } else {
-                return Err(::error::from(TLSError::General(String::from("private key or certificate not found"))));
+                return Err(crate::error::from(TLSError::General(String::from(
+                    "private key or certificate not found",
+                ))));
             }
         };
 
         Ok(Identity {
-            inner: ClientCert::Pem {
-                key,
-                certs,
-            },
+            inner: ClientCert::Pem { key, certs },
         })
     }
 
     #[cfg(feature = "default-tls")]
     pub(crate) fn add_to_native_tls(
         self,
-        tls: &mut ::native_tls::TlsConnectorBuilder,
-    ) -> ::Result<()> {
+        tls: &mut native_tls::TlsConnectorBuilder,
+    ) -> crate::Result<()> {
         match self.inner {
             ClientCert::Pkcs12(id) => {
                 tls.identity(id);
                 Ok(())
-            },
+            }
             #[cfg(feature = "rustls-tls")]
-            ClientCert::Pem { .. } => Err(::error::from(::error::Kind::TlsIncompatible))
+            ClientCert::Pem { .. } => Err(crate::error::from(crate::error::Kind::TlsIncompatible)),
         }
     }
 
     #[cfg(feature = "rustls-tls")]
-    pub(crate) fn add_to_rustls(
-        self,
-        tls: &mut ::rustls::ClientConfig,
-    ) -> ::Result<()> {
+    pub(crate) fn add_to_rustls(self, tls: &mut rustls::ClientConfig) -> crate::Result<()> {
         match self.inner {
             ClientCert::Pem { key, certs } => {
                 tls.set_single_client_cert(certs, key);
                 Ok(())
-            },
+            }
             #[cfg(feature = "default-tls")]
-            ClientCert::Pkcs12(..) => return Err(::error::from(::error::Kind::TlsIncompatible))
+            ClientCert::Pkcs12(..) => Err(crate::error::from(crate::error::Kind::TlsIncompatible)),
         }
     }
 }
 
 impl fmt::Debug for Certificate {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Certificate")
-            .finish()
+        f.debug_struct("Certificate").finish()
     }
 }
 
 impl fmt::Debug for Identity {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Identity")
-            .finish()
+        f.debug_struct("Identity").finish()
     }
 }
 
@@ -263,16 +250,20 @@ pub(crate) enum TlsBackend {
     #[cfg(feature = "default-tls")]
     Default,
     #[cfg(feature = "rustls-tls")]
-    Rustls
+    Rustls,
 }
 
 impl Default for TlsBackend {
     fn default() -> TlsBackend {
         #[cfg(feature = "default-tls")]
-        { TlsBackend::Default }
+        {
+            TlsBackend::Default
+        }
 
         #[cfg(all(feature = "rustls-tls", not(feature = "default-tls")))]
-        { TlsBackend::Rustls }
+        {
+            TlsBackend::Rustls
+        }
     }
 }
 
@@ -286,7 +277,7 @@ impl ServerCertVerifier for NoVerifier {
         _roots: &RootCertStore,
         _presented_certs: &[rustls::Certificate],
         _dns_name: DNSNameRef,
-        _ocsp_response: &[u8]
+        _ocsp_response: &[u8],
     ) -> Result<ServerCertVerified, TLSError> {
         Ok(ServerCertVerified::assertion())
     }

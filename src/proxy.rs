@@ -1,12 +1,12 @@
 use std::fmt;
-use std::sync::Arc;
 #[cfg(feature = "socks")]
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::SocketAddr;
+use std::sync::Arc;
 
+use crate::{IntoUrl, Url};
 use http::{header::HeaderValue, Uri};
 use hyper::client::connect::Destination;
-use url::percent_encoding::percent_decode;
-use {IntoUrl, Url};
+use percent_encoding::percent_decode;
 use std::collections::HashMap;
 use std::env;
 #[cfg(target_os = "windows")]
@@ -26,7 +26,7 @@ use winreg::RegKey;
 /// For instance, let's look at `Proxy::http`:
 ///
 /// ```rust
-/// # fn run() -> Result<(), Box<::std::error::Error>> {
+/// # fn run() -> Result<(), Box<std::error::Error>> {
 /// let proxy = reqwest::Proxy::http("https://secure.example")?;
 /// # Ok(())
 /// # }
@@ -52,7 +52,7 @@ pub struct Proxy {
 pub enum ProxyScheme {
     Http {
         auth: Option<HeaderValue>,
-        uri: ::hyper::Uri,
+        uri: hyper::Uri,
     },
     #[cfg(feature = "socks")]
     Socks5 {
@@ -66,17 +66,17 @@ pub enum ProxyScheme {
 /// parsing from a URL-like type, whilst also supporting proxy schemes
 /// built directly using the factory methods.
 pub trait IntoProxyScheme {
-    fn into_proxy_scheme(self) -> ::Result<ProxyScheme>;
+    fn into_proxy_scheme(self) -> crate::Result<ProxyScheme>;
 }
 
 impl<T: IntoUrl> IntoProxyScheme for T {
-    fn into_proxy_scheme(self) -> ::Result<ProxyScheme> {
+    fn into_proxy_scheme(self) -> crate::Result<ProxyScheme> {
         ProxyScheme::parse(self.into_url()?)
     }
 }
 
 impl IntoProxyScheme for ProxyScheme {
-    fn into_proxy_scheme(self) -> ::Result<ProxyScheme> {
+    fn into_proxy_scheme(self) -> crate::Result<ProxyScheme> {
         Ok(self)
     }
 }
@@ -88,7 +88,7 @@ impl Proxy {
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::http("https://my.prox")?)
     ///     .build()?;
@@ -96,9 +96,9 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn http<U: IntoProxyScheme>(proxy_scheme: U) -> ::Result<Proxy> {
+    pub fn http<U: IntoProxyScheme>(proxy_scheme: U) -> crate::Result<Proxy> {
         Ok(Proxy::new(Intercept::Http(
-            proxy_scheme.into_proxy_scheme()?
+            proxy_scheme.into_proxy_scheme()?,
         )))
     }
 
@@ -108,7 +108,7 @@ impl Proxy {
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::https("https://example.prox:4545")?)
     ///     .build()?;
@@ -116,9 +116,9 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn https<U: IntoProxyScheme>(proxy_scheme: U) -> ::Result<Proxy> {
+    pub fn https<U: IntoProxyScheme>(proxy_scheme: U) -> crate::Result<Proxy> {
         Ok(Proxy::new(Intercept::Https(
-            proxy_scheme.into_proxy_scheme()?
+            proxy_scheme.into_proxy_scheme()?,
         )))
     }
 
@@ -128,7 +128,7 @@ impl Proxy {
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::all("http://pro.xy")?)
     ///     .build()?;
@@ -136,9 +136,9 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     /// ```
-    pub fn all<U: IntoProxyScheme>(proxy_scheme: U) -> ::Result<Proxy> {
+    pub fn all<U: IntoProxyScheme>(proxy_scheme: U) -> crate::Result<Proxy> {
         Ok(Proxy::new(Intercept::All(
-            proxy_scheme.into_proxy_scheme()?
+            proxy_scheme.into_proxy_scheme()?,
         )))
     }
 
@@ -148,7 +148,7 @@ impl Proxy {
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let target = reqwest::Url::parse("https://my.prox")?;
     /// let client = reqwest::Client::builder()
     ///     .proxy(reqwest::Proxy::custom(move |url| {
@@ -163,12 +163,12 @@ impl Proxy {
     /// # }
     /// # fn main() {}
     pub fn custom<F, U: IntoProxyScheme>(fun: F) -> Proxy
-    where F: Fn(&Url) -> Option<U> + Send + Sync + 'static {
+    where
+        F: Fn(&Url) -> Option<U> + Send + Sync + 'static,
+    {
         Proxy::new(Intercept::Custom(Custom {
             auth: None,
-            func: Arc::new(move |url| {
-                fun(url).map(IntoProxyScheme::into_proxy_scheme)
-            }),
+            func: Arc::new(move |url| fun(url).map(IntoProxyScheme::into_proxy_scheme)),
         }))
     }
 
@@ -179,9 +179,7 @@ impl Proxy {
     */
 
     fn new(intercept: Intercept) -> Proxy {
-        Proxy {
-            intercept,
-        }
+        Proxy { intercept }
     }
 
     /// Set the `Proxy-Authorization` header using Basic auth.
@@ -190,7 +188,7 @@ impl Proxy {
     ///
     /// ```
     /// # extern crate reqwest;
-    /// # fn run() -> Result<(), Box<::std::error::Error>> {
+    /// # fn run() -> Result<(), Box<std::error::Error>> {
     /// let proxy = reqwest::Proxy::https("http://localhost:1234")?
     ///     .basic_auth("Aladdin", "open sesame");
     /// # Ok(())
@@ -214,15 +212,13 @@ impl Proxy {
 
     pub(crate) fn http_basic_auth<D: Dst>(&self, uri: &D) -> Option<HeaderValue> {
         match self.intercept {
-            Intercept::All(ProxyScheme::Http { ref auth, .. }) |
-            Intercept::Http(ProxyScheme::Http { ref auth, .. }) => auth.clone(),
-            Intercept::Custom(ref custom) => {
-                custom.call(uri).and_then(|scheme| match scheme {
-                    ProxyScheme::Http { auth, .. } => auth,
-                    #[cfg(feature = "socks")]
-                    _ => None,
-                })
-            }
+            Intercept::All(ProxyScheme::Http { ref auth, .. })
+            | Intercept::Http(ProxyScheme::Http { ref auth, .. }) => auth.clone(),
+            Intercept::Custom(ref custom) => custom.call(uri).and_then(|scheme| match scheme {
+                ProxyScheme::Http { auth, .. } => auth,
+                #[cfg(feature = "socks")]
+                _ => None,
+            }),
             _ => None,
         }
     }
@@ -236,14 +232,14 @@ impl Proxy {
                 } else {
                     None
                 }
-            },
+            }
             Intercept::Https(ref u) => {
                 if uri.scheme() == "https" {
                     Some(u.clone())
                 } else {
                     None
                 }
-            },
+            }
             Intercept::Custom(ref custom) => custom.call(uri),
         }
     }
@@ -251,12 +247,8 @@ impl Proxy {
     pub(crate) fn is_match<D: Dst>(&self, uri: &D) -> bool {
         match self.intercept {
             Intercept::All(_) => true,
-            Intercept::Http(_) => {
-                uri.scheme() == "http"
-            },
-            Intercept::Https(_) => {
-                uri.scheme() == "https"
-            },
+            Intercept::Http(_) => uri.scheme() == "http",
+            Intercept::Https(_) => uri.scheme() == "https",
             Intercept::Custom(ref custom) => custom.call(uri).is_some(),
         }
     }
@@ -266,10 +258,10 @@ impl ProxyScheme {
     // To start conservative, keep builders private for now.
 
     /// Proxy traffic via the specified URL over HTTP
-    fn http<T: IntoUrl>(url: T) -> ::Result<Self> {
+    fn http<T: IntoUrl>(url: T) -> crate::Result<Self> {
         Ok(ProxyScheme::Http {
             auth: None,
-            uri: ::into_url::expect_uri(&url.into_url()?),
+            uri: crate::into_url::expect_uri(&url.into_url()?),
         })
     }
 
@@ -279,7 +271,7 @@ impl ProxyScheme {
     ///
     /// Current SOCKS5 support is provided via blocking IO.
     #[cfg(feature = "socks")]
-    fn socks5(addr: SocketAddr) -> ::Result<Self> {
+    fn socks5(addr: SocketAddr) -> crate::Result<Self> {
         Ok(ProxyScheme::Socks5 {
             addr,
             auth: None,
@@ -295,7 +287,7 @@ impl ProxyScheme {
     ///
     /// Current SOCKS5 support is provided via blocking IO.
     #[cfg(feature = "socks")]
-    fn socks5h(addr: SocketAddr) -> ::Result<Self> {
+    fn socks5h(addr: SocketAddr) -> crate::Result<Self> {
         Ok(ProxyScheme::Socks5 {
             addr,
             auth: None,
@@ -304,7 +296,11 @@ impl ProxyScheme {
     }
 
     /// Use a username and password when connecting to the proxy server
-    fn with_basic_auth<T: Into<String>, U: Into<String>>(mut self, username: T, password: U) -> Self {
+    fn with_basic_auth<T: Into<String>, U: Into<String>>(
+        mut self,
+        username: T,
+        password: U,
+    ) -> Self {
         self.set_basic_auth(username, password);
         self
     }
@@ -314,7 +310,7 @@ impl ProxyScheme {
             ProxyScheme::Http { ref mut auth, .. } => {
                 let header = encode_basic_auth(&username.into(), &password.into());
                 *auth = Some(header);
-            },
+            }
             #[cfg(feature = "socks")]
             ProxyScheme::Socks5 { ref mut auth, .. } => {
                 *auth = Some((username.into(), password.into()));
@@ -326,18 +322,18 @@ impl ProxyScheme {
     ///
     /// Supported schemes: HTTP, HTTPS, (SOCKS5, SOCKS5H if `socks` feature is enabled).
     // Private for now...
-    fn parse(url: Url) -> ::Result<Self> {
+    fn parse(url: Url) -> crate::Result<Self> {
         // Resolve URL to a host and port
         #[cfg(feature = "socks")]
         let to_addr = || {
-            let host_and_port = try_!(url.with_default_port(|url| match url.scheme() {
-                "socks5" | "socks5h" => Ok(1080),
-                _ => Err(())
+            let addrs = try_!(url.socket_addrs(|| match url.scheme() {
+                "socks5" | "socks5h" => Some(1080),
+                _ => None,
             }));
-            let mut addr = try_!(host_and_port.to_socket_addrs());
-            addr
+            addrs
+                .into_iter()
                 .next()
-                .ok_or_else(::error::unknown_proxy_scheme)
+                .ok_or_else(crate::error::unknown_proxy_scheme)
         };
 
         let mut scheme = match url.scheme() {
@@ -346,7 +342,7 @@ impl ProxyScheme {
             "socks5" => Self::socks5(to_addr()?)?,
             #[cfg(feature = "socks")]
             "socks5h" => Self::socks5h(to_addr()?)?,
-            _ => return Err(::error::unknown_proxy_scheme())
+            _ => return Err(crate::error::unknown_proxy_scheme()),
         };
 
         if let Some(pwd) = url.password() {
@@ -359,8 +355,6 @@ impl ProxyScheme {
     }
 }
 
-
-
 #[derive(Clone, Debug)]
 enum Intercept {
     All(ProxyScheme),
@@ -372,9 +366,9 @@ enum Intercept {
 impl Intercept {
     fn set_basic_auth(&mut self, username: &str, password: &str) {
         match self {
-            Intercept::All(ref mut s) |
-            Intercept::Http(ref mut s) |
-            Intercept::Https(ref mut s) => s.set_basic_auth(username, password),
+            Intercept::All(ref mut s)
+            | Intercept::Http(ref mut s)
+            | Intercept::Https(ref mut s) => s.set_basic_auth(username, password),
             Intercept::Custom(ref mut custom) => {
                 let header = encode_basic_auth(username, password);
                 custom.auth = Some(header);
@@ -387,7 +381,7 @@ impl Intercept {
 struct Custom {
     // This auth only applies if the returned ProxyScheme doesn't have an auth...
     auth: Option<HeaderValue>,
-    func: Arc<dyn Fn(&Url) -> Option<::Result<ProxyScheme>> + Send + Sync + 'static>,
+    func: Arc<dyn Fn(&Url) -> Option<crate::Result<ProxyScheme>> + Send + Sync + 'static>,
 }
 
 impl Custom {
@@ -397,10 +391,10 @@ impl Custom {
             uri.scheme(),
             uri.host(),
             uri.port().map(|_| ":").unwrap_or(""),
-            uri.port().map(|p| p.to_string()).unwrap_or(String::new())
+            uri.port().map(|p| p.to_string()).unwrap_or_default()
         )
-            .parse()
-            .expect("should be valid Url");
+        .parse()
+        .expect("should be valid Url");
 
         (self.func)(&url)
             .and_then(|result| result.ok())
@@ -414,7 +408,7 @@ impl Custom {
                             uri,
                         }
                     }
-                },
+                }
                 #[cfg(feature = "socks")]
                 socks => socks,
             })
@@ -468,8 +462,7 @@ impl Dst for Uri {
     }
 
     fn host(&self) -> &str {
-        Uri::host(self)
-            .expect("<Uri as Dst>::host should have a str")
+        Uri::host(self).expect("<Uri as Dst>::host should have a str")
     }
 
     fn port(&self) -> Option<u16> {
@@ -500,8 +493,7 @@ pub fn get_proxies() -> HashMap<String, Url> {
     proxies
 }
 
-fn insert_proxy(proxies: &mut HashMap<String, Url>, schema: String, addr: String)
-{
+fn insert_proxy(proxies: &mut HashMap<String, Url>, schema: String, addr: String) {
     if let Ok(valid_addr) = Url::parse(&addr) {
         proxies.insert(schema, valid_addr);
     }
@@ -517,12 +509,11 @@ fn get_from_environment() -> HashMap<String, Url> {
         if key.ends_with(PROXY_KEY_ENDS) {
             let end_indx = key.len() - PROXY_KEY_ENDS.len();
             let schema = &key[..end_indx];
-            insert_proxy(&mut proxies, String::from(schema), String::from(value));
+            insert_proxy(&mut proxies, String::from(schema), value);
         }
     }
     proxies
 }
-
 
 #[cfg(target_os = "windows")]
 fn get_from_registry_impl() -> Result<HashMap<String, Url>, Box<dyn Error>> {
@@ -544,7 +535,11 @@ fn get_from_registry_impl() -> Result<HashMap<String, Url>, Box<dyn Error>> {
             let protocol_parts: Vec<&str> = p.split("=").collect();
             match protocol_parts.as_slice() {
                 [protocol, address] => {
-                    insert_proxy(&mut proxies, String::from(*protocol), String::from(*address));
+                    insert_proxy(
+                        &mut proxies,
+                        String::from(*protocol),
+                        String::from(*address),
+                    );
                 }
                 _ => {
                     // Contains invalid protocol setting, just break the loop
@@ -559,9 +554,21 @@ fn get_from_registry_impl() -> Result<HashMap<String, Url>, Box<dyn Error>> {
         if proxy_server.starts_with("http:") {
             insert_proxy(&mut proxies, String::from("http"), proxy_server);
         } else {
-            insert_proxy(&mut proxies, String::from("http"), format!("http://{}", proxy_server));
-            insert_proxy(&mut proxies, String::from("https"), format!("https://{}", proxy_server));
-            insert_proxy(&mut proxies, String::from("ftp"), format!("https://{}", proxy_server));
+            insert_proxy(
+                &mut proxies,
+                String::from("http"),
+                format!("http://{}", proxy_server),
+            );
+            insert_proxy(
+                &mut proxies,
+                String::from("https"),
+                format!("https://{}", proxy_server),
+            );
+            insert_proxy(
+                &mut proxies,
+                String::from("ftp"),
+                format!("https://{}", proxy_server),
+            );
         }
     }
     Ok(proxies)
@@ -582,8 +589,7 @@ mod tests {
         }
 
         fn host(&self) -> &str {
-            Url::host_str(self)
-                .expect("<Url as Dst>::host should have a str")
+            Url::host_str(self).expect("<Url as Dst>::host should have a str")
         }
 
         fn port(&self) -> Option<u16> {
@@ -594,7 +600,6 @@ mod tests {
     fn url(s: &str) -> Url {
         s.parse().unwrap()
     }
-
 
     fn intercepted_uri(p: &Proxy, s: &str) -> Uri {
         match p.intercept(&url(s)).unwrap() {
@@ -642,7 +647,6 @@ mod tests {
         assert_eq!(intercepted_uri(&p, other), target);
     }
 
-
     #[test]
     fn test_custom() {
         let target1 = "http://example.domain/";
@@ -688,7 +692,7 @@ mod tests {
         // reset user setting.
         match system_proxy {
             Err(_) => env::remove_var("http_proxy"),
-            Ok(proxy) => env::set_var("http_proxy", proxy)
+            Ok(proxy) => env::set_var("http_proxy", proxy),
         }
     }
 }

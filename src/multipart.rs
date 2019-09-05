@@ -44,8 +44,8 @@ use std::path::Path;
 
 use mime_guess::{self, Mime};
 
-use async_impl::multipart::{FormParts, PartMetadata, PartProps};
-use {Body};
+use crate::async_impl::multipart::{FormParts, PartMetadata, PartProps};
+use crate::Body;
 
 /// A multipart/form-data request.
 pub struct Form {
@@ -82,8 +82,9 @@ impl Form {
     ///     .text("password", "secret");
     /// ```
     pub fn text<T, U>(self, name: T, value: U) -> Form
-    where T: Into<Cow<'static, str>>,
-          U: Into<Cow<'static, str>>,
+    where
+        T: Into<Cow<'static, str>>,
+        U: Into<Cow<'static, str>>,
     {
         self.part(name, Part::text(value))
     }
@@ -95,7 +96,7 @@ impl Form {
     /// # Examples
     ///
     /// ```no_run
-    /// # fn run() -> ::std::io::Result<()> {
+    /// # fn run() -> std::io::Result<()> {
     /// let files = reqwest::multipart::Form::new()
     ///     .file("key", "/path/to/file")?;
     /// # Ok(())
@@ -106,8 +107,9 @@ impl Form {
     ///
     /// Errors when the file cannot be opened.
     pub fn file<T, U>(self, name: T, path: U) -> io::Result<Form>
-    where T: Into<Cow<'static, str>>,
-          U: AsRef<Path>
+    where
+        T: Into<Cow<'static, str>>,
+        U: AsRef<Path>,
     {
         Ok(self.part(name, Part::file(path)?))
     }
@@ -162,11 +164,11 @@ impl fmt::Debug for Form {
     }
 }
 
-
 impl Part {
     /// Makes a text parameter.
     pub fn text<T>(value: T) -> Part
-    where T: Into<Cow<'static, str>>,
+    where
+        T: Into<Cow<'static, str>>,
     {
         let body = match value.into() {
             Cow::Borrowed(slice) => Body::from(slice),
@@ -177,7 +179,8 @@ impl Part {
 
     /// Makes a new parameter from arbitrary bytes.
     pub fn bytes<T>(value: T) -> Part
-    where T: Into<Cow<'static, [u8]>>
+    where
+        T: Into<Cow<'static, [u8]>>,
     {
         let body = match value.into() {
             Cow::Borrowed(slice) => Body::from(slice),
@@ -207,16 +210,14 @@ impl Part {
     /// Errors when the file cannot be opened.
     pub fn file<T: AsRef<Path>>(path: T) -> io::Result<Part> {
         let path = path.as_ref();
-        let file_name = path.file_name().and_then(|filename| {
-            Some(filename.to_string_lossy().into_owned())
-        });
-        let ext = path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("");
+        let file_name = path
+            .file_name()
+            .map(|filename| filename.to_string_lossy().into_owned());
+
+        let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
         let mime = mime_guess::from_ext(ext).first_or_octet_stream();
         let file = File::open(path)?;
-        let field = Part::new(Body::from(file))
-            .mime(mime);
+        let field = Part::new(Body::from(file)).mime(mime);
 
         Ok(if let Some(file_name) = file_name {
             field.file_name(file_name)
@@ -233,7 +234,7 @@ impl Part {
     }
 
     /// Tries to set the mime of this part.
-    pub fn mime_str(self, mime: &str) -> ::Result<Part> {
+    pub fn mime_str(self, mime: &str) -> crate::Result<Part> {
         Ok(self.mime(try_!(mime.parse())))
     }
 
@@ -287,16 +288,14 @@ pub(crate) struct Reader {
 
 impl fmt::Debug for Reader {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Reader")
-            .field("form", &self.form)
-            .finish()
+        f.debug_struct("Reader").field("form", &self.form).finish()
     }
 }
 
 impl Reader {
     fn new(form: Form) -> Reader {
         let mut reader = Reader {
-            form: form,
+            form,
             active_reader: None,
         };
         reader.next_reader();
@@ -304,16 +303,19 @@ impl Reader {
     }
 
     fn next_reader(&mut self) {
-        self.active_reader = if self.form.inner.fields.len() != 0 {
+        self.active_reader = if !self.form.inner.fields.is_empty() {
             // We need to move out of the vector here because we are consuming the field's reader
             let (name, field) = self.form.inner.fields.remove(0);
             let boundary = Cursor::new(format!("--{}\r\n", self.form.boundary()));
             let header = Cursor::new({
                 // Try to use cached headers created by compute_length
-                let mut h = if self.form.inner.computed_headers.len() > 0 {
+                let mut h = if !self.form.inner.computed_headers.is_empty() {
                     self.form.inner.computed_headers.remove(0)
                 } else {
-                    self.form.inner.percent_encoding.encode_headers(&name, field.metadata())
+                    self.form
+                        .inner
+                        .percent_encoding
+                        .encode_headers(&name, field.metadata())
                 };
                 h.extend_from_slice(b"\r\n\r\n");
                 h
@@ -324,12 +326,13 @@ impl Reader {
                 .chain(Cursor::new("\r\n"));
             // According to https://tools.ietf.org/html/rfc2046#section-5.1.1
             // the very last field has a special boundary
-            if self.form.inner.fields.len() != 0 {
+            if !self.form.inner.fields.is_empty() {
                 Some(Box::new(reader))
             } else {
-                Some(Box::new(reader.chain(Cursor::new(
-                    format!("--{}--\r\n", self.form.boundary()),
-                ))))
+                Some(Box::new(reader.chain(Cursor::new(format!(
+                    "--{}--\r\n",
+                    self.form.boundary()
+                )))))
             }
         } else {
             None
@@ -352,7 +355,7 @@ impl Read for Reader {
                 }
                 None => return Ok(total_bytes_read),
             };
-            if last_read_bytes == 0 && buf.len() != 0 {
+            if last_read_bytes == 0 && !buf.is_empty() {
                 self.next_reader();
             }
         }
@@ -377,43 +380,38 @@ mod tests {
     fn read_to_end() {
         let mut output = Vec::new();
         let mut form = Form::new()
-            .part("reader1", Part::reader(::std::io::empty()))
+            .part("reader1", Part::reader(std::io::empty()))
             .part("key1", Part::text("value1"))
-            .part(
-                "key2",
-                Part::text("value2").mime(::mime::IMAGE_BMP),
-            )
-            .part("reader2", Part::reader(::std::io::empty()))
-            .part(
-                "key3",
-                Part::text("value3").file_name("filename"),
-            );
+            .part("key2", Part::text("value2").mime(mime::IMAGE_BMP))
+            .part("reader2", Part::reader(std::io::empty()))
+            .part("key3", Part::text("value3").file_name("filename"));
         form.inner.boundary = "boundary".to_string();
         let length = form.compute_length();
-        let expected = "--boundary\r\n\
-                        Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
-                        \r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
-                        value1\r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key2\"\r\n\
-                        Content-Type: image/bmp\r\n\r\n\
-                        value2\r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"reader2\"\r\n\r\n\
-                        \r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
-                        value3\r\n--boundary--\r\n";
+        let expected =
+            "--boundary\r\n\
+             Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
+             \r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
+             value1\r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"key2\"\r\n\
+             Content-Type: image/bmp\r\n\r\n\
+             value2\r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"reader2\"\r\n\r\n\
+             \r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
+             value3\r\n--boundary--\r\n";
         form.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
-            ::std::str::from_utf8(&output).unwrap()
+            std::str::from_utf8(&output).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
-        assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);
+        assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
         assert!(length.is_none());
     }
 
@@ -422,41 +420,36 @@ mod tests {
         let mut output = Vec::new();
         let mut form = Form::new()
             .text("key1", "value1")
-            .part(
-                "key2",
-                Part::text("value2").mime(::mime::IMAGE_BMP),
-            )
-            .part(
-                "key3",
-                Part::text("value3").file_name("filename"),
-            );
+            .part("key2", Part::text("value2").mime(mime::IMAGE_BMP))
+            .part("key3", Part::text("value3").file_name("filename"));
         form.inner.boundary = "boundary".to_string();
         let length = form.compute_length();
-        let expected = "--boundary\r\n\
-                        Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
-                        value1\r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key2\"\r\n\
-                        Content-Type: image/bmp\r\n\r\n\
-                        value2\r\n\
-                        --boundary\r\n\
-                        Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
-                        value3\r\n--boundary--\r\n";
+        let expected =
+            "--boundary\r\n\
+             Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
+             value1\r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"key2\"\r\n\
+             Content-Type: image/bmp\r\n\r\n\
+             value2\r\n\
+             --boundary\r\n\
+             Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
+             value3\r\n--boundary--\r\n";
         form.reader().read_to_end(&mut output).unwrap();
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
-            ::std::str::from_utf8(&output).unwrap()
+            std::str::from_utf8(&output).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
-        assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);
+        assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
         assert_eq!(length.unwrap(), expected.len() as u64);
     }
 
     #[test]
     fn read_to_end_with_header() {
         let mut output = Vec::new();
-        let mut part = Part::text("value2").mime(::mime::IMAGE_BMP);
+        let mut part = Part::text("value2").mime(mime::IMAGE_BMP);
         part.meta.headers.insert("Hdr3", "/a/b/c".parse().unwrap());
         let mut form = Form::new().part("key2", part);
         form.inner.boundary = "boundary".to_string();
@@ -471,9 +464,9 @@ mod tests {
         // These prints are for debug purposes in case the test fails
         println!(
             "START REAL\n{}\nEND REAL",
-            ::std::str::from_utf8(&output).unwrap()
+            std::str::from_utf8(&output).unwrap()
         );
         println!("START EXPECTED\n{}\nEND EXPECTED", expected);
-        assert_eq!(::std::str::from_utf8(&output).unwrap(), expected);
+        assert_eq!(std::str::from_utf8(&output).unwrap(), expected);
     }
 }
