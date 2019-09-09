@@ -83,7 +83,7 @@ fn cookie_response_accessor() {
 fn cookie_store_simple() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
     let client = reqwest::r#async::Client::builder()
-        .cookie_store(true)
+        .cookie_store(reqwest::cookie::SimpleCookieStore::default())
         .build()
         .unwrap();
 
@@ -130,7 +130,7 @@ fn cookie_store_simple() {
 fn cookie_store_overwrite_existing() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
     let client = reqwest::r#async::Client::builder()
-        .cookie_store(true)
+        .cookie_store(reqwest::cookie::SimpleCookieStore::default())
         .build()
         .unwrap();
 
@@ -197,7 +197,7 @@ fn cookie_store_overwrite_existing() {
 fn cookie_store_max_age() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
     let client = reqwest::r#async::Client::builder()
-        .cookie_store(true)
+        .cookie_store(reqwest::cookie::SimpleCookieStore::default())
         .build()
         .unwrap();
 
@@ -243,7 +243,7 @@ fn cookie_store_max_age() {
 fn cookie_store_expires() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
     let client = reqwest::r#async::Client::builder()
-        .cookie_store(true)
+        .cookie_store(reqwest::cookie::SimpleCookieStore::default())
         .build()
         .unwrap();
 
@@ -289,7 +289,7 @@ fn cookie_store_expires() {
 fn cookie_store_path() {
     let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
     let client = reqwest::r#async::Client::builder()
-        .cookie_store(true)
+        .cookie_store(reqwest::cookie::SimpleCookieStore::default())
         .build()
         .unwrap();
 

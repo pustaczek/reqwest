@@ -1,6 +1,6 @@
 //! The cookies module contains types for working with request and response cookies.
 
-use crate::cookie_crate;
+use crate::{cookie_crate, Url};
 use crate::header;
 use std::borrow::Cow;
 use std::fmt;
@@ -129,11 +129,38 @@ pub(crate) fn extract_response_cookies<'a>(
         .map(|value| Cookie::parse(value))
 }
 
-/// A persistent cookie store that provides session support.
-#[derive(Default)]
-pub(crate) struct CookieStore(pub(crate) cookie_store::CookieStore);
+/// An abstract cookie store that can be put into a client.
+///
+/// Use [`SimpleCookieStore`] when its API is sufficient, or a third-party crate like cookie_store if it's not.
+pub trait CookieStore: Send + Sync + 'static {
+    /// Returns cookies that should be attached to a request to this URL.
+    fn get_request_cookies<'a>(&'a self, url: &Url) -> Box<dyn Iterator<Item = Cookie> + 'a>;
+    /// Add cookies returned from the server as a response to a request with the given URL.
+    fn store_response_cookies(&mut self, cookies: &mut dyn Iterator<Item = Cookie>, url: &Url);
+}
 
-impl<'a> fmt::Debug for CookieStore {
+/// A default cookie store with no additional functions.
+///
+/// To create an instance, use the Default impl.
+#[derive(Default)]
+pub struct SimpleCookieStore(pub(crate) cookie_store::CookieStore);
+
+impl CookieStore for SimpleCookieStore {
+    fn get_request_cookies<'a>(&'a self, url: &Url) -> Box<dyn Iterator<Item = Cookie> + 'a> {
+        Box::new(
+            self.0
+                .get_request_cookies(url)
+                .map(|cookie| Cookie(cookie.clone().into_owned())),
+        )
+    }
+
+    fn store_response_cookies(&mut self, cookies: &mut dyn Iterator<Item = Cookie>, url: &Url) {
+        self.0
+            .store_response_cookies(cookies.map(|cookie| cookie.into_inner().into_owned()), url);
+    }
+}
+
+impl fmt::Debug for SimpleCookieStore {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.0.fmt(f)
     }

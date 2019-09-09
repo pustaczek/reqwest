@@ -401,7 +401,7 @@ async fn test_invalid_location_stops_redirect_gh484() {
 async fn test_redirect_302_with_set_cookies() {
     let code = 302;
     let client = reqwest::ClientBuilder::new()
-        .cookie_store(true)
+        .cookie_store(reqwest::cookie::SimpleCookieStore::default())
         .build()
         .unwrap();
     let server = server! {

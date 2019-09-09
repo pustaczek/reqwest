@@ -16,6 +16,7 @@ use super::wait;
 use crate::{async_impl, header, IntoUrl, Method, Proxy, RedirectPolicy};
 #[cfg(feature = "tls")]
 use crate::{Certificate, Identity};
+use crate::cookie::CookieStore;
 
 /// A `Client` to make Requests with.
 ///
@@ -388,12 +389,12 @@ impl ClientBuilder {
     ///
     /// ```
     /// let client = reqwest::blocking::Client::builder()
-    ///     .cookie_store(true)
+    ///     .cookie_store(reqwest::cookie::SimpleCookieStore::default())
     ///     .build()
     ///     .unwrap();
     /// ```
-    pub fn cookie_store(self, enable: bool) -> ClientBuilder {
-        self.with_inner(|inner| inner.cookie_store(enable))
+    pub fn cookie_store(self, store: impl CookieStore) -> ClientBuilder {
+        self.with_inner(|inner| inner.cookie_store(store))
     }
 }
 
