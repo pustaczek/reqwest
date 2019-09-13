@@ -530,6 +530,11 @@ impl Client {
         RequestBuilder::new(self.clone(), req)
     }
 
+    /// TODO: add docs
+    pub fn cookies(&self) -> Option<&RwLock<cookie::CookieStore>> {
+        self.inner.cookie_store.as_ref()
+    }
+
     /// Executes a `Request`.
     ///
     /// A `Request` can be built manually with `Request::new()` or obtained
