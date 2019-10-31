@@ -188,7 +188,7 @@ impl RequestBuilder {
     /// ```
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
-            async_impl::request::replace_headers(req.headers_mut(), headers);
+            crate::request_headers::replace_headers(req.headers_mut(), headers);
         }
         self
     }

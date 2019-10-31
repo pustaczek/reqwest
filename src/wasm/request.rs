@@ -1,6 +1,6 @@
 use std::fmt;
 
-use http::{Method, HeaderMap};
+use http::{Method, header::HeaderName, HeaderMap, HeaderValue, HttpTryFrom};
 use url::Url;
 
 use super::{Body, Client, Response};
@@ -83,6 +83,39 @@ impl RequestBuilder {
         RequestBuilder { client, request }
     }
 
+    /// Add a `Header` to this Request.
+    pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
+    where
+        HeaderName: HttpTryFrom<K>,
+        HeaderValue: HttpTryFrom<V>,
+    {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match <HeaderName as HttpTryFrom<K>>::try_from(key) {
+                Ok(key) => match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
+                    Ok(value) => {
+                        req.headers_mut().append(key, value);
+                    }
+                    Err(e) => error = Some(crate::error::builder(e.into())),
+                },
+                Err(e) => error = Some(crate::error::builder(e.into())),
+            };
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
+    }
+
+    /// Add a set of Headers to the existing ones on this Request.
+    ///
+    /// The headers will be merged in to any already set.
+    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            crate::request_headers::replace_headers(req.headers_mut(), headers);
+        }
+        self
+    }
 
     /// Set the request body.
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
