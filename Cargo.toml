@@ -157,3 +157,9 @@ required-features = ["cookies"]
 name = "gzip"
 path = "tests/gzip.rs"
 required-features = ["gzip"]
+
+[workspace]
+members = [
+    ".",
+    "wasm-test",
+]

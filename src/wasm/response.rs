@@ -1,19 +1,22 @@
 use std::fmt;
 
 use http::{HeaderMap, StatusCode};
+use url::Url;
 
 /// A Response to a submitted `Request`.
 pub struct Response {
     http: http::Response<web_sys::Response>,
+    url: Url,
 }
 
 impl Response {
     pub(super) fn new(
         res: http::Response<web_sys::Response>,
-        //url: Url,
+        url: Url,
     ) -> Response {
         Response {
             http: res,
+            url,
         }
     }
 
@@ -42,6 +45,12 @@ impl Response {
         self.http.version()
     }
     */
+
+    /// Get the final `Url` of this `Response`.
+    #[inline]
+    pub fn url(&self) -> &Url {
+        &self.url
+    }
 
     // pub async fn json()
 

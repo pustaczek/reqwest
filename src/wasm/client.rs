@@ -1,5 +1,6 @@
 use std::future::Future;
 use http::Method;
+use url::Url;
 use wasm_bindgen::UnwrapThrowExt as _;
 
 use crate::IntoUrl;
@@ -143,9 +144,8 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         );
     }
 
-    resp.body(js_resp)
-        .map(Response::new)
-        .map_err(crate::error::request)
+    let url = Url::parse(&js_resp.url()).expect_throw("url parse");
+    Ok(Response::new(resp.body(js_resp).map_err(crate::error::request)?, url))
 }
 
 // ===== impl ClientBuilder =====
