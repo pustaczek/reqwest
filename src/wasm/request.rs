@@ -1,9 +1,10 @@
 use std::fmt;
 
 use http::{Method, header::HeaderName, HeaderMap, HeaderValue, HttpTryFrom};
-use url::Url;
+use serde::Serialize;
 
 use super::{Body, Client, Response};
+use crate::Url;
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -113,6 +114,46 @@ impl RequestBuilder {
     pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             crate::request_headers::replace_headers(req.headers_mut(), headers);
+        }
+        self
+    }
+
+    /// Modify the query string of the URL.
+    ///
+    /// Modifies the URL of this request, adding the parameters provided.
+    /// This method appends and does not overwrite. This means that it can
+    /// be called multiple times and that existing query parameters are not
+    /// overwritten if the same key is used. The key will simply show up
+    /// twice in the query string.
+    /// Calling `.query([("foo", "a"), ("foo", "b")])` gives `"foo=a&foo=b"`.
+    ///
+    /// # Note
+    /// This method does not support serializing a single key-value
+    /// pair. Instead of using `.query(("key", "val"))`, use a sequence, such
+    /// as `.query(&[("key", "val")])`. It's also possible to serialize structs
+    /// and maps into a key-value pair.
+    ///
+    /// # Errors
+    /// This method will fail if the object you provide cannot be serialized
+    /// into a query string.
+    pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            let url = req.url_mut();
+            let mut pairs = url.query_pairs_mut();
+            let serializer = serde_urlencoded::Serializer::new(&mut pairs);
+
+            if let Err(err) = query.serialize(serializer) {
+                error = Some(crate::error::builder(err));
+            }
+        }
+        if let Ok(ref mut req) = self.request {
+            if let Some("") = req.url().query() {
+                req.url_mut().set_query(None);
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
         }
         self
     }
