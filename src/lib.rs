@@ -201,6 +201,7 @@ pub use url::Url;
 #[macro_use]
 mod error;
 mod into_url;
+mod multipart_detail;
 mod request_headers;
 
 pub use self::error::{Error, Result};

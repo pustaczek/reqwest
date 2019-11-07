@@ -1,4 +1,3 @@
-//! multipart/form-data
 use std::borrow::Cow;
 use std::fmt;
 use std::pin::Pin;
@@ -11,17 +10,27 @@ use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
 use futures_core::Stream;
 use futures_util::{future, stream, StreamExt};
 
-use super::Body;
+pub(crate) trait MultipartBody: fmt::Debug + for <'r> From<&'r str> + From<String> + for <'r> From<&'r [u8]> + From<Vec<u8>> + 'static {
+    type ImplStream: Stream<Item = Result<Bytes, crate::Error>> + Send + Sync;
+    fn empty() -> Self;
+    fn content_length(&self) -> Option<u64>;
+    fn stream<S>(stream: S) -> Self
+    where
+        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+        Bytes: From<S::Ok>;
+    fn into_stream(self) -> Self::ImplStream;    
+}
 
-/// An async multipart/form-data request.
-pub struct Form {
-    inner: FormParts<Part>,
+/// A multipart/form-data request.
+pub(crate) struct Form<B: MultipartBody> {
+    inner: FormParts<Part<B>>,
 }
 
 /// A field in a multipart form.
-pub struct Part {
+pub(crate) struct Part<B: MultipartBody> {
     meta: PartMetadata,
-    value: Body,
+    value: B,
 }
 
 pub(crate) struct FormParts<P> {
@@ -44,9 +53,9 @@ pub(crate) trait PartProps {
 
 // ===== impl Form =====
 
-impl Form {
+impl<B: MultipartBody> Form<B> {
     /// Creates a new async Form without any content.
-    pub fn new() -> Form {
+    pub fn new() -> Form<B> {
         Form {
             inner: FormParts::new(),
         }
@@ -67,7 +76,7 @@ impl Form {
     ///     .text("username", "seanmonstar")
     ///     .text("password", "secret");
     /// ```
-    pub fn text<T, U>(self, name: T, value: U) -> Form
+    pub fn text<T, U>(self, name: T, value: U) -> Form<B>
     where
         T: Into<Cow<'static, str>>,
         U: Into<Cow<'static, str>>,
@@ -76,7 +85,7 @@ impl Form {
     }
 
     /// Adds a customized Part.
-    pub fn part<T>(self, name: T, part: Part) -> Form
+    pub fn part<T>(self, name: T, part: Part<B>) -> Form<B>
     where
         T: Into<Cow<'static, str>>,
     {
@@ -84,24 +93,24 @@ impl Form {
     }
 
     /// Configure this `Form` to percent-encode using the `path-segment` rules.
-    pub fn percent_encode_path_segment(self) -> Form {
+    pub fn percent_encode_path_segment(self) -> Form<B> {
         self.with_inner(|inner| inner.percent_encode_path_segment())
     }
 
     /// Configure this `Form` to percent-encode using the `attr-char` rules.
-    pub fn percent_encode_attr_chars(self) -> Form {
+    pub fn percent_encode_attr_chars(self) -> Form<B> {
         self.with_inner(|inner| inner.percent_encode_attr_chars())
     }
 
     /// Configure this `Form` to skip percent-encoding
-    pub fn percent_encode_noop(self) -> Form {
+    pub fn percent_encode_noop(self) -> Form<B> {
         self.with_inner(|inner| inner.percent_encode_noop())
     }
 
     /// Consume this instance and transform into an instance of Body for use in a request.
-    pub(crate) fn stream(mut self) -> Body {
+    pub(crate) fn stream(mut self) -> B {
         if self.inner.fields.is_empty() {
-            return Body::empty();
+            return B::empty();
         }
 
         // create initial part to init reduce chain
@@ -120,14 +129,14 @@ impl Form {
         let last = stream::once(future::ready(Ok(
             format!("--{}--\r\n", self.boundary()).into()
         )));
-        Body::stream(stream.chain(last))
+        B::stream(stream.chain(last))
     }
 
     /// Generate a hyper::Body stream for a single Part instance of a Form request.
     pub(crate) fn part_stream<T>(
         &mut self,
         name: T,
-        part: Part,
+        part: Part<B>,
     ) -> impl Stream<Item = Result<Bytes, crate::Error>>
     where
         T: Into<Cow<'static, str>>,
@@ -158,7 +167,7 @@ impl Form {
 
     fn with_inner<F>(self, func: F) -> Self
     where
-        F: FnOnce(FormParts<Part>) -> FormParts<Part>,
+        F: FnOnce(FormParts<Part<B>>) -> FormParts<Part<B>>,
     {
         Form {
             inner: func(self.inner),
@@ -166,7 +175,7 @@ impl Form {
     }
 }
 
-impl fmt::Debug for Form {
+impl<B: MultipartBody> fmt::Debug for Form<B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         self.inner.fmt_fields("Form", f)
     }
@@ -174,37 +183,37 @@ impl fmt::Debug for Form {
 
 // ===== impl Part =====
 
-impl Part {
+impl<B: MultipartBody> Part<B> {
     /// Makes a text parameter.
-    pub fn text<T>(value: T) -> Part
+    pub fn text<T>(value: T) -> Part<B>
     where
         T: Into<Cow<'static, str>>,
     {
         let body = match value.into() {
-            Cow::Borrowed(slice) => Body::from(slice),
-            Cow::Owned(string) => Body::from(string),
+            Cow::Borrowed(slice) => B::from(slice),
+            Cow::Owned(string) => B::from(string),
         };
         Part::new(body)
     }
 
     /// Makes a new parameter from arbitrary bytes.
-    pub fn bytes<T>(value: T) -> Part
+    pub fn bytes<T>(value: T) -> Part<B>
     where
         T: Into<Cow<'static, [u8]>>,
     {
         let body = match value.into() {
-            Cow::Borrowed(slice) => Body::from(slice),
-            Cow::Owned(vec) => Body::from(vec),
+            Cow::Borrowed(slice) => B::from(slice),
+            Cow::Owned(vec) => B::from(vec),
         };
         Part::new(body)
     }
 
     /// Makes a new parameter from an arbitrary stream.
-    pub fn stream<T: Into<Body>>(value: T) -> Part {
+    pub fn stream<T: Into<B>>(value: T) -> Part<B> {
         Part::new(value.into())
     }
 
-    fn new(value: Body) -> Part {
+    fn new(value: B) -> Part<B> {
         Part {
             meta: PartMetadata::new(),
             value,
@@ -212,17 +221,17 @@ impl Part {
     }
 
     /// Tries to set the mime of this part.
-    pub fn mime_str(self, mime: &str) -> crate::Result<Part> {
+    pub fn mime_str(self, mime: &str) -> crate::Result<Part<B>> {
         Ok(self.mime(mime.parse().map_err(crate::error::builder)?))
     }
 
     // Re-export when mime 0.4 is available, with split MediaType/MediaRange.
-    fn mime(self, mime: Mime) -> Part {
+    fn mime(self, mime: Mime) -> Part<B> {
         self.with_inner(move |inner| inner.mime(mime))
     }
 
     /// Sets the filename, builder style.
-    pub fn file_name<T>(self, filename: T) -> Part
+    pub fn file_name<T>(self, filename: T) -> Part<B>
     where
         T: Into<Cow<'static, str>>,
     {
@@ -240,7 +249,7 @@ impl Part {
     }
 }
 
-impl fmt::Debug for Part {
+impl<B: MultipartBody> fmt::Debug for Part<B> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut dbg = f.debug_struct("Part");
         dbg.field("value", &self.value);
@@ -249,7 +258,7 @@ impl fmt::Debug for Part {
     }
 }
 
-impl PartProps for Part {
+impl<B: MultipartBody> PartProps for Part<B> {
     fn value_len(&self) -> Option<u64> {
         self.value.content_length()
     }
@@ -523,121 +532,4 @@ fn random() -> u64 {
         rng.set(n);
         n.0.wrapping_mul(0x2545_f491_4f6c_dd1d)
     })
-}
-
-#[cfg(all(test, not(target_arch = "wasm32")))]
-mod tests {
-    use super::*;
-    use futures_util::TryStreamExt;
-    use futures_util::{future, stream};
-    use tokio;
-
-    #[test]
-    fn form_empty() {
-        let form = Form::new();
-
-        let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-        let body = form.stream().into_stream();
-        let s = body.map(|try_c| try_c.map(Bytes::from)).try_concat();
-
-        let out = rt.block_on(s);
-        assert_eq!(out.unwrap(), Vec::new());
-    }
-
-    #[test]
-    fn stream_to_end() {
-        let mut form = Form::new()
-            .part(
-                "reader1",
-                Part::stream(Body::stream(stream::once(future::ready::<
-                    Result<String, crate::Error>,
-                >(Ok(
-                    "part1".to_owned(),
-                ))))),
-            )
-            .part("key1", Part::text("value1"))
-            .part("key2", Part::text("value2").mime(mime::IMAGE_BMP))
-            .part(
-                "reader2",
-                Part::stream(Body::stream(stream::once(future::ready::<
-                    Result<String, crate::Error>,
-                >(Ok(
-                    "part2".to_owned(),
-                ))))),
-            )
-            .part("key3", Part::text("value3").file_name("filename"));
-        form.inner.boundary = "boundary".to_string();
-        let expected =
-            "--boundary\r\n\
-             Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
-             part1\r\n\
-             --boundary\r\n\
-             Content-Disposition: form-data; name=\"key1\"\r\n\r\n\
-             value1\r\n\
-             --boundary\r\n\
-             Content-Disposition: form-data; name=\"key2\"\r\n\
-             Content-Type: image/bmp\r\n\r\n\
-             value2\r\n\
-             --boundary\r\n\
-             Content-Disposition: form-data; name=\"reader2\"\r\n\r\n\
-             part2\r\n\
-             --boundary\r\n\
-             Content-Disposition: form-data; name=\"key3\"; filename=\"filename\"\r\n\r\n\
-             value3\r\n--boundary--\r\n";
-        let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-        let body = form.stream().into_stream();
-        let s = body.map(|try_c| try_c.map(Bytes::from)).try_concat();
-
-        let out = rt.block_on(s).unwrap();
-        // These prints are for debug purposes in case the test fails
-        println!(
-            "START REAL\n{}\nEND REAL",
-            std::str::from_utf8(&out).unwrap()
-        );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
-        assert_eq!(std::str::from_utf8(&out).unwrap(), expected);
-    }
-
-    #[test]
-    fn stream_to_end_with_header() {
-        let mut part = Part::text("value2").mime(mime::IMAGE_BMP);
-        part.meta.headers.insert("Hdr3", "/a/b/c".parse().unwrap());
-        let mut form = Form::new().part("key2", part);
-        form.inner.boundary = "boundary".to_string();
-        let expected = "--boundary\r\n\
-                        Content-Disposition: form-data; name=\"key2\"\r\n\
-                        Content-Type: image/bmp\r\n\
-                        hdr3: /a/b/c\r\n\
-                        \r\n\
-                        value2\r\n\
-                        --boundary--\r\n";
-        let mut rt = tokio::runtime::current_thread::Runtime::new().expect("new rt");
-        let body = form.stream().into_stream();
-        let s = body.map(|try_c| try_c.map(Bytes::from)).try_concat();
-
-        let out = rt.block_on(s).unwrap();
-        // These prints are for debug purposes in case the test fails
-        println!(
-            "START REAL\n{}\nEND REAL",
-            std::str::from_utf8(&out).unwrap()
-        );
-        println!("START EXPECTED\n{}\nEND EXPECTED", expected);
-        assert_eq!(std::str::from_utf8(&out).unwrap(), expected);
-    }
-
-    #[test]
-    fn header_percent_encoding() {
-        let name = "start%'\"\r\nßend";
-        let field = Part::text("");
-
-        assert_eq!(
-            PercentEncoding::PathSegment.encode_headers(name, &field.meta),
-            &b"Content-Disposition: form-data; name*=utf-8''start%25'%22%0D%0A%C3%9Fend"[..]
-        );
-
-        assert_eq!(
-            PercentEncoding::AttrChar.encode_headers(name, &field.meta),
-            &b"Content-Disposition: form-data; name*=utf-8''start%25%27%22%0D%0A%C3%9Fend"[..]
-        );
-    }
 }
