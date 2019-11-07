@@ -175,6 +175,27 @@ impl RequestBuilder {
         builder
     }
 
+    /// Send a form body.
+    pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match serde_urlencoded::to_string(form) {
+                Ok(body) => {
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/x-www-form-urlencoded"),
+                    );
+                    *req.body_mut() = Some(body.into());
+                }
+                Err(err) => error = Some(crate::error::builder(err)),
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
+    }
+
     /// Add a `Header` to this Request.
     pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
     where
