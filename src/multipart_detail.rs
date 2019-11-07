@@ -10,7 +10,7 @@ use percent_encoding::{self, AsciiSet, NON_ALPHANUMERIC};
 use futures_core::Stream;
 use futures_util::{future, stream, StreamExt};
 
-pub(crate) trait MultipartBody: fmt::Debug + for <'r> From<&'r str> + From<String> + for <'r> From<&'r [u8]> + From<Vec<u8>> + 'static {
+pub(crate) trait MultipartBody: fmt::Debug + From<&'static str> + From<String> + From<&'static [u8]> + From<Vec<u8>> + 'static {
     type ImplStream: Stream<Item = Result<Bytes, crate::Error>> + Send + Sync;
     fn empty() -> Self;
     fn content_length(&self) -> Option<u64>;
@@ -226,7 +226,7 @@ impl<B: MultipartBody> Part<B> {
     }
 
     // Re-export when mime 0.4 is available, with split MediaType/MediaRange.
-    fn mime(self, mime: Mime) -> Part<B> {
+    pub(crate) fn mime(self, mime: Mime) -> Part<B> {
         self.with_inner(move |inner| inner.mime(mime))
     }
 
