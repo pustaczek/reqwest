@@ -9,7 +9,7 @@ use std::fmt;
 /// passing many things (like a string or vector of bytes).
 ///
 /// [builder]: ./struct.RequestBuilder.html#method.body
-pub struct Body(Bytes);
+pub struct Body(pub(crate) Bytes);
 
 impl Body {
     pub(crate) fn bytes(&self) -> &Bytes {

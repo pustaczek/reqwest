@@ -2,6 +2,7 @@ use wasm_bindgen::JsCast;
 
 mod body;
 mod client;
+mod multipart;
 mod request;
 mod response;
 

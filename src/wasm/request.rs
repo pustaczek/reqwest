@@ -1,11 +1,11 @@
-use http::HttpTryFrom;
+use http::{header::{CONTENT_LENGTH, CONTENT_TYPE}, HttpTryFrom};
 use serde::Serialize;
 use std::fmt;
 
 use http::Method;
 use url::Url;
 
-use super::{Body, Client, Response};
+use super::{Body, Client, multipart, Response};
 use crate::header::{HeaderMap, HeaderName, HeaderValue};
 
 /// A request which can be executed with `Client::execute()`.
@@ -132,6 +132,42 @@ impl RequestBuilder {
             req.body = Some(body.into());
         }
         self
+    }
+
+    /// Sends a multipart/form-data body.
+    ///
+    /// ```
+    /// # use reqwest::Error;
+    ///
+    /// # async fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
+    /// let form = reqwest::multipart::Form::new()
+    ///     .text("key3", "value3")
+    ///     .text("key4", "value4");
+    ///
+    ///
+    /// let response = client.post("your url")
+    ///     .multipart(form)
+    ///     .send()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {
+        let mut builder = self.header(
+            CONTENT_TYPE,
+            format!("multipart/form-data; boundary={}", multipart.boundary()).as_str(),
+        );
+
+        builder = match multipart.compute_length() {
+            Some(length) => builder.header(CONTENT_LENGTH, length),
+            None => builder,
+        };
+
+        if let Ok(ref mut req) = builder.request {
+            *req.body_mut() = Some(multipart.stream())
+        }
+        builder
     }
 
     /// Add a `Header` to this Request.
