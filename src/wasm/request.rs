@@ -79,6 +79,11 @@ impl Request {
     pub fn body_mut(&mut self) -> &mut Option<Body> {
         &mut self.body
     }
+
+    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>) {
+        (self.method, self.url, self.headers, self.body)
+    }
+
 }
 
 impl RequestBuilder {

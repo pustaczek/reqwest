@@ -127,17 +127,26 @@ impl fmt::Debug for Part {
 }
 
 impl multipart_detail::MultipartBody for Body {
-    type ImplStream = futures_util::stream::Once<futures_util::future::Ready<Result<Bytes, crate::Error>>>;
+    type ImplStream = crate::wasm::body::ImplStream;
 
     fn empty() -> Self {
         Body::empty()
     }
 
     fn content_length(&self) -> Option<u64> {
-        Some(self.bytes().len() as u64)
+        Body::content_length(&self)
+    }
+
+    fn stream<S>(stream: S) -> Self
+    where
+        S: futures_core::stream::TryStream + Send + Sync + 'static,
+        S::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
+        Bytes: From<S::Ok>,
+    {
+        Body::stream(stream)
     }
 
     fn into_stream(self) -> Self::ImplStream {
-        futures_util::stream::once(futures_util::future::ready(Ok(self.0)))
+        Body::into_stream(self)
     }
 }
