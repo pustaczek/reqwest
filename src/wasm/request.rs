@@ -1,10 +1,12 @@
+use http::HttpTryFrom;
+use serde::Serialize;
 use std::fmt;
 
-use http::{Method, header::HeaderName, HeaderMap, HeaderValue, HttpTryFrom};
-use serde::Serialize;
+use http::Method;
+use url::Url;
 
 use super::{Body, Client, Response};
-use crate::Url;
+use crate::header::{HeaderMap, HeaderName, HeaderValue};
 
 /// A request which can be executed with `Client::execute()`.
 pub struct Request {
@@ -84,40 +86,6 @@ impl RequestBuilder {
         RequestBuilder { client, request }
     }
 
-    /// Add a `Header` to this Request.
-    pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
-    where
-        HeaderName: HttpTryFrom<K>,
-        HeaderValue: HttpTryFrom<V>,
-    {
-        let mut error = None;
-        if let Ok(ref mut req) = self.request {
-            match <HeaderName as HttpTryFrom<K>>::try_from(key) {
-                Ok(key) => match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
-                    Ok(value) => {
-                        req.headers_mut().append(key, value);
-                    }
-                    Err(e) => error = Some(crate::error::builder(e.into())),
-                },
-                Err(e) => error = Some(crate::error::builder(e.into())),
-            };
-        }
-        if let Some(err) = error {
-            self.request = Err(err);
-        }
-        self
-    }
-
-    /// Add a set of Headers to the existing ones on this Request.
-    ///
-    /// The headers will be merged in to any already set.
-    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
-        if let Ok(ref mut req) = self.request {
-            crate::request_headers::replace_headers(req.headers_mut(), headers);
-        }
-        self
-    }
-
     /// Modify the query string of the URL.
     ///
     /// Modifies the URL of this request, adding the parameters provided.
@@ -162,6 +130,40 @@ impl RequestBuilder {
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.body = Some(body.into());
+        }
+        self
+    }
+
+    /// Add a `Header` to this Request.
+    pub fn header<K, V>(mut self, key: K, value: V) -> RequestBuilder
+    where
+        HeaderName: HttpTryFrom<K>,
+        HeaderValue: HttpTryFrom<V>,
+    {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match <HeaderName as HttpTryFrom<K>>::try_from(key) {
+                Ok(key) => match <HeaderValue as HttpTryFrom<V>>::try_from(value) {
+                    Ok(value) => {
+                        req.headers_mut().append(key, value);
+                    }
+                    Err(e) => error = Some(crate::error::builder(e.into())),
+                },
+                Err(e) => error = Some(crate::error::builder(e.into())),
+            };
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
+    }
+
+    /// Add a set of Headers to the existing ones on this Request.
+    ///
+    /// The headers will be merged in to any already set.
+    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            crate::request_headers::replace_headers(req.headers_mut(), headers);
         }
         self
     }
