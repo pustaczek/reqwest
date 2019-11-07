@@ -1,10 +1,11 @@
-use http::HttpTryFrom;
+use http::{header::{CONTENT_LENGTH, CONTENT_TYPE}, HttpTryFrom};
+use serde::Serialize;
 use std::fmt;
 
 use http::Method;
 use url::Url;
 
-use super::{Body, Client, Response};
+use super::{Body, Client, multipart, Response};
 use crate::header::{HeaderMap, HeaderName, HeaderValue};
 
 /// A request which can be executed with `Client::execute()`.
@@ -78,6 +79,11 @@ impl Request {
     pub fn body_mut(&mut self) -> &mut Option<Body> {
         &mut self.body
     }
+
+    pub(super) fn pieces(self) -> (Method, Url, HeaderMap, Option<Body>) {
+        (self.method, self.url, self.headers, self.body)
+    }
+
 }
 
 impl RequestBuilder {
@@ -85,10 +91,107 @@ impl RequestBuilder {
         RequestBuilder { client, request }
     }
 
+    /// Modify the query string of the URL.
+    ///
+    /// Modifies the URL of this request, adding the parameters provided.
+    /// This method appends and does not overwrite. This means that it can
+    /// be called multiple times and that existing query parameters are not
+    /// overwritten if the same key is used. The key will simply show up
+    /// twice in the query string.
+    /// Calling `.query([("foo", "a"), ("foo", "b")])` gives `"foo=a&foo=b"`.
+    ///
+    /// # Note
+    /// This method does not support serializing a single key-value
+    /// pair. Instead of using `.query(("key", "val"))`, use a sequence, such
+    /// as `.query(&[("key", "val")])`. It's also possible to serialize structs
+    /// and maps into a key-value pair.
+    ///
+    /// # Errors
+    /// This method will fail if the object you provide cannot be serialized
+    /// into a query string.
+    pub fn query<T: Serialize + ?Sized>(mut self, query: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            let url = req.url_mut();
+            let mut pairs = url.query_pairs_mut();
+            let serializer = serde_urlencoded::Serializer::new(&mut pairs);
+
+            if let Err(err) = query.serialize(serializer) {
+                error = Some(crate::error::builder(err));
+            }
+        }
+        if let Ok(ref mut req) = self.request {
+            if let Some("") = req.url().query() {
+                req.url_mut().set_query(None);
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
+        }
+        self
+    }
+
     /// Set the request body.
     pub fn body<T: Into<Body>>(mut self, body: T) -> RequestBuilder {
         if let Ok(ref mut req) = self.request {
             req.body = Some(body.into());
+        }
+        self
+    }
+
+    /// Sends a multipart/form-data body.
+    ///
+    /// ```
+    /// # use reqwest::Error;
+    ///
+    /// # async fn run() -> Result<(), Error> {
+    /// let client = reqwest::Client::new();
+    /// let form = reqwest::multipart::Form::new()
+    ///     .text("key3", "value3")
+    ///     .text("key4", "value4");
+    ///
+    ///
+    /// let response = client.post("your url")
+    ///     .multipart(form)
+    ///     .send()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn multipart(self, mut multipart: multipart::Form) -> RequestBuilder {
+        let mut builder = self.header(
+            CONTENT_TYPE,
+            format!("multipart/form-data; boundary={}", multipart.boundary()).as_str(),
+        );
+
+        builder = match multipart.compute_length() {
+            Some(length) => builder.header(CONTENT_LENGTH, length),
+            None => builder,
+        };
+
+        if let Ok(ref mut req) = builder.request {
+            *req.body_mut() = Some(multipart.stream())
+        }
+        builder
+    }
+
+    /// Send a form body.
+    pub fn form<T: Serialize + ?Sized>(mut self, form: &T) -> RequestBuilder {
+        let mut error = None;
+        if let Ok(ref mut req) = self.request {
+            match serde_urlencoded::to_string(form) {
+                Ok(body) => {
+                    req.headers_mut().insert(
+                        CONTENT_TYPE,
+                        HeaderValue::from_static("application/x-www-form-urlencoded"),
+                    );
+                    *req.body_mut() = Some(body.into());
+                }
+                Err(err) => error = Some(crate::error::builder(err)),
+            }
+        }
+        if let Some(err) = error {
+            self.request = Err(err);
         }
         self
     }
@@ -113,6 +216,16 @@ impl RequestBuilder {
         }
         if let Some(err) = error {
             self.request = Err(err);
+        }
+        self
+    }
+
+    /// Add a set of Headers to the existing ones on this Request.
+    ///
+    /// The headers will be merged in to any already set.
+    pub fn headers(mut self, headers: crate::header::HeaderMap) -> RequestBuilder {
+        if let Ok(ref mut req) = self.request {
+            crate::request_headers::replace_headers(req.headers_mut(), headers);
         }
         self
     }

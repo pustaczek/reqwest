@@ -1,6 +1,7 @@
 use http::Method;
 use js_sys::Uint8Array;
 use std::future::Future;
+use url::Url;
 use wasm_bindgen::UnwrapThrowExt as _;
 
 use super::{Request, RequestBuilder, Response};
@@ -101,18 +102,20 @@ impl Client {
 }
 
 async fn fetch(req: Request) -> crate::Result<Response> {
+    let (method, url, headers, body) = req.pieces();
+
     // Build the js Request
     let mut init = web_sys::RequestInit::new();
-    init.method(req.method().as_str());
+    init.method(method.as_str());
 
     let js_headers = web_sys::Headers::new()
         .map_err(crate::error::wasm)
         .map_err(crate::error::builder)?;
 
-    for (name, value) in req.headers() {
+    for (name, value) in headers {
         js_headers
             .append(
-                name.as_str(),
+                name.unwrap().as_str(),
                 value.to_str().map_err(crate::error::builder)?,
             )
             .map_err(crate::error::wasm)
@@ -120,13 +123,13 @@ async fn fetch(req: Request) -> crate::Result<Response> {
     }
     init.headers(&js_headers.into());
 
-    if let Some(body) = req.body() {
-        let body_bytes: &[u8] = body.bytes();
-        let body_array: Uint8Array = body_bytes.into();
+    if let Some(body) = body {
+        let body_bytes = body.read_into_bytes().await?;
+        let body_array: Uint8Array = body_bytes.as_slice().into();
         init.body(Some(&body_array.into()));
     }
 
-    let js_req = web_sys::Request::new_with_str_and_init(req.url().as_str(), &init)
+    let js_req = web_sys::Request::new_with_str_and_init(url.as_str(), &init)
         .map_err(crate::error::wasm)
         .map_err(crate::error::builder)?;
 
@@ -156,9 +159,8 @@ async fn fetch(req: Request) -> crate::Result<Response> {
         );
     }
 
-    resp.body(js_resp)
-        .map(Response::new)
-        .map_err(crate::error::request)
+    let url = Url::parse(&js_resp.url()).expect_throw("url parse");
+    Ok(Response::new(resp.body(js_resp).map_err(crate::error::request)?, url))
 }
 
 // ===== impl ClientBuilder =====

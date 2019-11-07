@@ -201,6 +201,8 @@ pub use url::Url;
 #[macro_use]
 mod error;
 mod into_url;
+mod multipart_detail;
+mod request_headers;
 
 pub use self::error::{Error, Result};
 pub use self::into_url::IntoUrl;
@@ -303,5 +305,5 @@ if_hyper! {
 if_wasm! {
     mod wasm;
 
-    pub use self::wasm::{Body, Client, ClientBuilder, Request, RequestBuilder, Response};
+    pub use self::wasm::{Body, Client, ClientBuilder, multipart, Request, RequestBuilder, Response};
 }
