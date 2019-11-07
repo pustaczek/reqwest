@@ -156,7 +156,8 @@ impl multipart_detail::MultipartBody for Body {
 #[cfg(all(test, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
-    use futures_util::TryStreamExt;
+    use crate::multipart_detail::{PercentEncoding};
+    use futures_util::{StreamExt, TryStreamExt};
     use futures_util::{future, stream};
     use tokio;
 
@@ -184,7 +185,7 @@ mod tests {
                 ))))),
             )
             .part("key1", Part::text("value1"))
-            .part("key2", Part::text("value2").mime(mime::IMAGE_BMP))
+            .part("key2", Part(Part::text("value2").0.mime(mime::IMAGE_BMP)))
             .part(
                 "reader2",
                 Part::stream(Body::stream(stream::once(future::ready::<
@@ -194,7 +195,7 @@ mod tests {
                 ))))),
             )
             .part("key3", Part::text("value3").file_name("filename"));
-        form.inner.boundary = "boundary".to_string();
+        form.0.inner.boundary = "boundary".to_string();
         let expected =
             "--boundary\r\n\
              Content-Disposition: form-data; name=\"reader1\"\r\n\r\n\
@@ -228,10 +229,10 @@ mod tests {
 
     #[test]
     fn stream_to_end_with_header() {
-        let mut part = Part::text("value2").mime(mime::IMAGE_BMP);
-        part.meta.headers.insert("Hdr3", "/a/b/c".parse().unwrap());
+        let mut part = Part(Part::text("value2").0.mime(mime::IMAGE_BMP));
+        part.0.meta.headers.insert("Hdr3", "/a/b/c".parse().unwrap());
         let mut form = Form::new().part("key2", part);
-        form.inner.boundary = "boundary".to_string();
+        form.0.inner.boundary = "boundary".to_string();
         let expected = "--boundary\r\n\
                         Content-Disposition: form-data; name=\"key2\"\r\n\
                         Content-Type: image/bmp\r\n\
@@ -259,12 +260,12 @@ mod tests {
         let field = Part::text("");
 
         assert_eq!(
-            PercentEncoding::PathSegment.encode_headers(name, &field.meta),
+            PercentEncoding::PathSegment.encode_headers(name, &field.0.meta),
             &b"Content-Disposition: form-data; name*=utf-8''start%25'%22%0D%0A%C3%9Fend"[..]
         );
 
         assert_eq!(
-            PercentEncoding::AttrChar.encode_headers(name, &field.meta),
+            PercentEncoding::AttrChar.encode_headers(name, &field.0.meta),
             &b"Content-Disposition: form-data; name*=utf-8''start%25%27%22%0D%0A%C3%9Fend"[..]
         );
     }

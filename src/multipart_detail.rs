@@ -24,12 +24,12 @@ pub(crate) trait MultipartBody: fmt::Debug + From<&'static str> + From<String> +
 
 /// A multipart/form-data request.
 pub(crate) struct Form<B: MultipartBody> {
-    inner: FormParts<Part<B>>,
+    pub inner: FormParts<Part<B>>,
 }
 
 /// A field in a multipart form.
 pub(crate) struct Part<B: MultipartBody> {
-    meta: PartMetadata,
+    pub(crate) meta: PartMetadata,
     value: B,
 }
 
