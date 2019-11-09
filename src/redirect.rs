@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::header::{HeaderMap, AUTHORIZATION, COOKIE, PROXY_AUTHORIZATION, WWW_AUTHENTICATE};
-use hyper::StatusCode;
+use http::StatusCode;
 
 use crate::Url;
 

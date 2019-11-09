@@ -120,7 +120,7 @@ impl<'a> Cookie<'a> {
 }
 
 pub(crate) fn extract_response_cookies<'a>(
-    headers: &'a hyper::HeaderMap,
+    headers: &'a http::HeaderMap,
 ) -> impl Iterator<Item = Result<Cookie<'a>, CookieParseError>> + 'a {
     headers
         .get_all(header::SET_COOKIE)
@@ -130,7 +130,7 @@ pub(crate) fn extract_response_cookies<'a>(
 
 /// A persistent cookie store that provides session support.
 #[derive(Default)]
-pub(crate) struct CookieStore(pub(crate) cookie_store::CookieStore);
+pub struct CookieStore(pub cookie_store::CookieStore);
 
 impl<'a> fmt::Debug for CookieStore {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

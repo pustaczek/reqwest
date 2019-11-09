@@ -35,8 +35,6 @@ use crate::tls::TlsBackend;
 use crate::{Certificate, Identity};
 use crate::{IntoUrl, Method, Proxy, StatusCode, Url};
 
-static DEFAULT_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
-
 /// An asynchronous `Client` to make Requests with.
 ///
 /// The Client has various configuration values to tweak, but the defaults

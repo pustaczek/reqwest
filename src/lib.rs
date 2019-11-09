@@ -202,6 +202,7 @@ pub use url::Url;
 mod error;
 mod into_url;
 mod multipart_detail;
+mod redirect;
 mod request_headers;
 
 pub use self::error::{Error, Result};
@@ -238,6 +239,8 @@ pub use self::into_url::IntoUrl;
 pub async fn get<T: IntoUrl>(url: T) -> crate::Result<Response> {
     Client::builder().build()?.get(url).send().await
 }
+
+static DEFAULT_USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
 fn _assert_impls() {
     fn assert_send<T: Send>() {}
@@ -284,12 +287,9 @@ if_hyper! {
     #[cfg(feature = "blocking")]
     pub mod blocking;
     mod connect;
-    #[cfg(feature = "cookies")]
-    pub mod cookie;
     //#[cfg(feature = "trust-dns")]
     //mod dns;
     mod proxy;
-    mod redirect;
     #[cfg(feature = "tls")]
     mod tls;
 
@@ -301,6 +301,9 @@ if_hyper! {
         };
     }
 }
+
+#[cfg(feature = "cookies")]
+pub mod cookie;
 
 if_wasm! {
     mod wasm;
