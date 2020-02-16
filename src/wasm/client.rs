@@ -4,6 +4,7 @@ use log::debug;
 use std::{future::Future, str, sync::{Arc, RwLock}};
 use url::Url;
 use wasm_bindgen::UnwrapThrowExt as _;
+use wasm_bindgen::JsCast;
 
 use super::{Body, Request, RequestBuilder, Response};
 use crate::{cookie, DEFAULT_USER_AGENT, into_url::{expect_uri, try_uri}, redirect::{self, remove_sensitive_headers, RedirectPolicy}, IntoUrl};
@@ -327,17 +328,40 @@ fn convert_fetch_response(js_resp: web_sys::Response) -> crate::Result<http::Res
 
 fn convert_fetch_headers(js_resp: &web_sys::Response) -> impl Iterator<Item = (String, String)> {
     let js_headers = js_resp.headers();
-    let js_iter = js_sys::try_iter(&js_headers)
-        .expect_throw("headers try_iter")
-        .expect_throw("headers have an iterator");
-    js_iter.map(|item| {
-        let item = item.expect_throw("headers iterator doesn't throw");
-        let mut v: Vec<String> = item.into_serde().expect_throw("headers into_serde");
-        (
-            std::mem::replace(v.get_mut(0).expect_throw("headers name"), String::new()),
-            std::mem::replace(v.get_mut(1).expect_throw("headers value"), String::new()),
-        )
-    })
+    let js_headers_raw = js_sys::Reflect::get(&js_headers, &js_sys::JsString::from("raw"))
+        .expect_throw("node-fetch .headers.raw does not exist")
+        .dyn_into::<js_sys::Function>()
+        .expect_throw("node-fetch .headers.raw is not a function")
+        .call0(&js_headers)
+        .expect_throw("node-fetch .headers.raw() call failed");
+    let header_names = js_sys::Reflect::own_keys(&js_headers_raw)
+        .expect_throw("node-fetch .headers.raw() is not an object");
+    header_names
+        .to_vec()
+        .into_iter()
+        .flat_map(|header_name| {
+            let header_name = header_name
+                .dyn_into::<js_sys::JsString>()
+                .expect_throw("node-fetch raw header name is not a string");
+            let header_values = js_sys::Reflect::get(&js_headers_raw, &header_name)
+                .expect_throw("node-fetch raw header contains keys it does not contain");
+            let header_values = header_values
+                .dyn_into::<js_sys::Array>()
+                .expect_throw("node-fetch raw header values are not an array");
+            let header_name = String::from(&header_name);
+            header_values
+                .to_vec()
+                .into_iter()
+                .map(|header_value| {
+                    let header_value = header_value
+                        .dyn_into::<js_sys::JsString>()
+                        .expect_throw("node-fetch raw header value is not a string");
+                    (header_name.clone(), header_value.into())
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
 }
 
 #[cfg(feature = "cookies")]
