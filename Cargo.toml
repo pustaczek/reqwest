@@ -23,8 +23,8 @@ http = "0.1.15"
 log = "0.4"
 url = "2.1"
 bytes = "0.4"
-futures-core-preview = { version = "=0.3.0-alpha.19" }
-futures-util-preview = { version = "=0.3.0-alpha.19" }
+futures-core = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false }
 http-body = "=0.2.0-alpha.3"
 mime_guess = "2.0"
 percent-encoding = "2.1"
